@@ -705,9 +705,7 @@ button { font: inherit; color: inherit; }
 }
 .list-box h4 span { color: var(--neon); text-shadow: 0 0 10px rgba(255,58,216,.6); }
 .list-box .list-hint { margin: 0 0 1rem; font-size: .88rem; color: var(--muted); }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.form-grid .full { grid-column: 1 / -1; }
-@media (max-width: 520px) { .form-grid { grid-template-columns: 1fr; } }
+.form-grid { display: grid; gap: 12px; }
 .field label { display: block; margin-bottom: .3rem; font-size: .8rem; font-weight: 500; letter-spacing: .04em; color: var(--muted); }
 .field input, .field select {
   width: 100%;
@@ -723,12 +721,32 @@ button { font: inherit; color: inherit; }
 }
 .field select option { background: var(--surface); }
 .field input:focus, .field select:focus { outline: none; border-color: var(--neon); background: rgba(255,58,216,.05); box-shadow: 0 0 0 3px rgba(255,58,216,.2); }
-.field input:user-invalid { border-color: var(--danger); }
-.check { display: flex; gap: .6rem; align-items: flex-start; font-size: .88rem; color: var(--muted); cursor: pointer; }
-.check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--neon); flex: none; }
+.field input[aria-invalid="true"] { border-color: var(--danger); }
+
+/* RPP fijado por el link: se ve pero no se puede cambiar */
+.rpp-locked { position: relative; }
+.field .rpp-locked input {
+  padding-right: 2.8rem;
+  border-style: dashed;
+  background: rgba(47, 224, 168, .05);
+  color: var(--leaf);
+  font-weight: 700;
+  cursor: not-allowed;
+}
+.field .rpp-locked input:focus { border-color: rgba(255,255,255,.16); box-shadow: none; }
+.rpp-locked svg {
+  position: absolute; right: .9rem; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; fill: var(--leaf);
+  pointer-events: none;
+}
+
+/* Campo trampa para bots: fuera de la vista de las personas */
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; margin-top: 1.1rem; }
 .form-actions .btn { flex: 1 1 auto; }
 .form-error { margin: .7rem 0 0; color: var(--danger); font-size: .88rem; }
+.list-legal { margin: .9rem 0 0; font-size: .76rem; line-height: 1.45; color: var(--muted); opacity: .8; }
 
 .list-done { text-align: center; padding: .8rem 0; }
 .list-done .tick {

@@ -36,16 +36,9 @@ window.BOTANIC_CONFIG = {
     // "2026-12-31",
   ],
 
-  /* ------------------------------------------------------------------
-     LISTA: dónde se envían las inscripciones.
-     - Si "endpoint" está vacío, la inscripción se envía por WhatsApp
-       al número de arriba con todos los datos ya rellenados.
-     - Si pegas aquí la URL de la Web App de Google Apps Script
-       (ver backend/google-apps-script.gs), las inscripciones se guardan
-       automáticamente en una hoja de Google Sheets.
-     ------------------------------------------------------------------ */
+  /* Topes de la lista (los aplica el servidor para que un ataque no pueda llenarla) */
   lista: {
-    endpoint: "",
-    maxAcompanantes: 10
+    maxPorNoche: 1500,      // inscripciones totales por noche
+    maxPorRppNoche: 300     // inscripciones por RPP y noche
   }
 };

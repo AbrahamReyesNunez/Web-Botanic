@@ -1,0 +1,13 @@
+{
+  "name": "web-botanic",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web de Discoteca Botanic Chipiona con lista por RPP",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -10,3 +10,9 @@ desktop.ini
 
 # Claude Code (local)
 .claude/settings.local.json
+
+# Datos de la lista (temporal, hasta tener base de datos)
+data/db/inscripciones.json
+data/db/*.tmp
+.env
+node_modules/

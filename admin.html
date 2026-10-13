@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Panel de lista · Botanic</title>
+  <meta name="theme-color" content="#06120f">
+  <link rel="icon" href="img/brand/botanic.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin">
+
+  <header class="admin-bar">
+    <a href="./" class="brand">B<span class="o-slash">Ø</span>TANIC</a>
+    <span class="admin-tag">Panel de lista</span>
+    <button class="btn btn-ghost btn-sm" id="salir" hidden><span class="btn-label">Salir</span><span class="btn-arrow" aria-hidden="true">→</span></button>
+  </header>
+
+  <!-- ============ ACCESO ============ -->
+  <main class="container admin-main" id="acceso" hidden>
+    <form class="admin-card login" id="login-form" novalidate>
+      <h1 class="section-title">Acceso</h1>
+      <input type="text" name="usuario" autocomplete="username" value="admin" hidden>
+      <div class="field">
+        <label for="clave">Clave del panel</label>
+        <input id="clave" name="clave" type="password" autocomplete="current-password" required maxlength="200">
+      </div>
+      <button class="btn btn-neon" type="submit"><span class="btn-label">Entrar</span><span class="btn-arrow" aria-hidden="true">→</span></button>
+      <p class="form-error" id="login-error" role="alert" hidden></p>
+    </form>
+  </main>
+
+  <!-- ============ PANEL ============ -->
+  <main class="container admin-main" id="panel" hidden>
+    <section class="admin-toolbar">
+      <div class="field">
+        <label for="noche">Noche</label>
+        <select id="noche"></select>
+      </div>
+      <a class="btn btn-ghost btn-sm" id="exportar"><span class="btn-label">Exportar CSV</span><span class="btn-arrow" aria-hidden="true">↓</span></a>
+    </section>
+
+    <section class="admin-card">
+      <p class="eyebrow">Inscritos</p>
+      <p class="admin-total"><span id="total">0</span> <small id="total-fecha"></small></p>
+      <div class="rpp-stats" id="rpp-stats"></div>
+    </section>
+
+    <section class="admin-card">
+      <div class="admin-card-head">
+        <p class="eyebrow">Lista de la noche</p>
+        <div class="field admin-search">
+          <label for="buscar" class="sr-only">Buscar</label>
+          <input id="buscar" type="search" placeholder="Buscar nombre o RPP" autocomplete="off">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Hora</th><th>Nombre</th><th>RPP</th><th><span class="sr-only">Acciones</span></th></tr></thead>
+          <tbody id="filas"></tbody>
+        </table>
+      </div>
+      <p class="admin-empty" id="vacio" hidden>Todavía no hay nadie apuntado a esta noche.</p>
+    </section>
+
+    <section class="admin-card">
+      <p class="eyebrow">Links de RPP</p>
+      <p class="admin-hint">Cada RPP comparte su link. Quien se apunta desde él queda asignado a ese RPP. Los RPP se gestionan en <code>data/db/rpps.json</code>.</p>
+      <ul class="rpp-links" id="rpp-links"></ul>
+    </section>
+  </main>
+
+  <script src="js/admin.js"></script>
+</body>
+</html>

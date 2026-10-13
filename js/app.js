@@ -168,6 +168,7 @@
     const nav = $("#nav");
     const setOpen = (open) => {
       nav.classList.toggle("open", open);
+      document.body.style.overflow = open ? "hidden" : "";
       burger.setAttribute("aria-expanded", String(open));
       burger.setAttribute("aria-label", open ? "Cerrar menú" : "Abrir menú");
     };

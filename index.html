@@ -10,10 +10,11 @@
   <meta property="og:description" content="De miércoles a sábado. Agenda, lista y mesas VIP.">
   <meta property="og:image" content="img/brand/botanic.jpg">
   <link rel="icon" href="img/brand/botanic.jpg">
+  <script>document.documentElement.classList.add("js");</script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -26,7 +27,7 @@
       <a href="#galeria">Galería</a>
       <a href="#vip">Mesas VIP</a>
       <a href="#info">Cómo llegar</a>
-      <a href="#agenda" class="btn btn-neon btn-sm" data-ir-proxima>Apúntate a la lista</a>
+      <a href="#agenda" class="btn btn-neon btn-sm" data-ir-proxima><span class="btn-label">Lista</span><span class="btn-arrow" aria-hidden="true">→</span></a>
     </nav>
     <button class="burger" id="burger" aria-label="Abrir menú" aria-expanded="false" aria-controls="nav">
       <span></span><span></span><span></span>
@@ -35,18 +36,36 @@
 
   <!-- ============ PORTADA ============ -->
   <section class="hero" id="inicio">
-    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-layer hero-back" data-depth="0.12" aria-hidden="true"></div>
+    <div class="beams" aria-hidden="true">
+      <span class="beam beam-1"></span>
+      <span class="beam beam-2"></span>
+      <span class="beam beam-3"></span>
+    </div>
+    <div class="hero-layer hero-front" data-depth="0.32" aria-hidden="true"></div>
+
     <div class="hero-content">
       <p class="eyebrow">Discoteca · Terraza · Chipiona</p>
-      <h1 class="neon-title">B<span class="o-slash">Ø</span>TANIC</h1>
+      <h1 class="neon-title" id="neon-title" aria-label="Botanic">B<span class="o-slash">Ø</span>TANIC</h1>
       <p class="hero-sub">De miércoles a sábado desde las 23:30</p>
-      <div class="hero-next" id="hero-next" hidden>
-        <span class="pulse" aria-hidden="true"></span>
-        <span id="hero-next-text"></span>
+
+      <div class="countdown" id="countdown" hidden>
+        <p class="cd-label" id="cd-label"></p>
+        <div class="cd-units" id="cd-units" role="timer" aria-live="off">
+          <div class="cd-unit"><span class="cd-num" id="cd-d">00</span><span class="cd-cap">días</span></div>
+          <span class="cd-sep" aria-hidden="true">:</span>
+          <div class="cd-unit"><span class="cd-num" id="cd-h">00</span><span class="cd-cap">horas</span></div>
+          <span class="cd-sep" aria-hidden="true">:</span>
+          <div class="cd-unit"><span class="cd-num" id="cd-m">00</span><span class="cd-cap">min</span></div>
+          <span class="cd-sep" aria-hidden="true">:</span>
+          <div class="cd-unit"><span class="cd-num" id="cd-s">00</span><span class="cd-cap">seg</span></div>
+        </div>
+        <p class="cd-open" id="cd-open" hidden><span class="pulse" aria-hidden="true"></span> Estamos abiertos</p>
       </div>
+
       <div class="hero-actions">
-        <a href="#agenda" class="btn btn-neon" data-ir-proxima>Apúntate a la lista</a>
-        <a href="#vip" class="btn btn-ghost">Reservar mesa VIP</a>
+        <a href="#agenda" class="btn btn-neon" data-ir-proxima><span class="btn-label">Apúntate a la lista</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+        <a href="#vip" class="btn btn-ghost"><span class="btn-label">Reservar mesa VIP</span><span class="btn-arrow" aria-hidden="true">→</span></a>
       </div>
     </div>
     <a href="#semana" class="scroll-hint" aria-label="Bajar">
@@ -54,12 +73,18 @@
     </a>
   </section>
 
+  <!-- ============ CINTA ============ -->
+  <div class="marquee-wrap" aria-hidden="true">
+    <div class="marquee marquee-solid" data-marquee="Miércoles ✦ Jueves ✦ Viernes ✦ Sábado ✦ Botanic Chipiona ✦"></div>
+    <div class="marquee marquee-outline" data-marquee="Lista ✦ Mesas VIP ✦ Terraza ✦ Hasta las 7:00 ✦" data-reverse></div>
+  </div>
+
   <!-- ============ ESTA SEMANA ============ -->
   <section class="section" id="semana">
     <div class="container">
-      <header class="section-head">
+      <header class="section-head" data-reveal>
         <p class="eyebrow">Próximas noches</p>
-        <h2 class="section-title">Esta semana en Botanic</h2>
+        <h2 class="section-title">Esta semana en <span class="outline">Botanic</span></h2>
       </header>
       <div class="week-strip" id="week-strip"></div>
     </div>
@@ -68,13 +93,13 @@
   <!-- ============ AGENDA / CALENDARIO ============ -->
   <section class="section section-alt" id="agenda">
     <div class="container">
-      <header class="section-head">
+      <header class="section-head" data-reveal>
         <p class="eyebrow">Agenda</p>
-        <h2 class="section-title">Calendario</h2>
+        <h2 class="section-title">Elige tu <span class="outline">noche</span></h2>
         <p class="section-lead">Pulsa en una noche para ver la portada y apuntarte a la lista.</p>
       </header>
 
-      <div class="calendar" id="calendar">
+      <div class="calendar" id="calendar" data-reveal="scale">
         <div class="cal-toolbar">
           <button class="cal-nav" id="cal-prev" aria-label="Mes anterior">&#8592;</button>
           <h3 class="cal-month" id="cal-month" aria-live="polite"></h3>
@@ -96,30 +121,30 @@
   <!-- ============ GALERÍA ============ -->
   <section class="section" id="galeria">
     <div class="container">
-      <header class="section-head">
+      <header class="section-head" data-reveal>
         <p class="eyebrow">Galería</p>
-        <h2 class="section-title">Así se vive Botanic</h2>
+        <h2 class="section-title">Así se vive <span class="outline">Botanic</span></h2>
         <p class="section-lead">Las fotos de cada noche. Búscate.</p>
       </header>
-      <div class="gal-filters" id="gal-filters" role="tablist" aria-label="Filtrar por noche"></div>
+      <div class="gal-filters" id="gal-filters" role="tablist" aria-label="Filtrar por noche" data-reveal></div>
       <div class="gal-grid" id="gal-grid"></div>
-      <div class="gal-empty" id="gal-empty" hidden>
+      <div class="gal-empty" id="gal-empty" data-reveal hidden>
         <p>Muy pronto las fotos de nuestras noches.</p>
-        <a class="btn btn-ghost" id="gal-ig" target="_blank" rel="noopener">Mientras, síguenos en Instagram</a>
+        <a class="btn btn-ghost" id="gal-ig" target="_blank" rel="noopener"><span class="btn-label">Síguenos en Instagram</span><span class="btn-arrow" aria-hidden="true">↗</span></a>
       </div>
       <div class="gal-more" id="gal-more" hidden>
-        <button class="btn btn-ghost" id="gal-more-btn">Ver más fotos</button>
+        <button class="btn btn-ghost" id="gal-more-btn"><span class="btn-label">Ver más fotos</span><span class="btn-arrow" aria-hidden="true">↓</span></button>
       </div>
     </div>
   </section>
 
   <!-- ============ VIP ============ -->
   <section class="section section-vip" id="vip">
-    <div class="vip-bg" aria-hidden="true"></div>
+    <div class="vip-bg" data-depth="0.15" aria-hidden="true"></div>
     <div class="container vip-inner">
-      <div>
+      <div data-reveal="left">
         <p class="eyebrow">Reservados</p>
-        <h2 class="section-title">Mesas VIP</h2>
+        <h2 class="section-title">Mesas <span class="outline">VIP</span></h2>
         <p class="section-lead">Celebra tu cumpleaños, despedida o simplemente tu noche con mesa reservada, botella y la mejor vista de la pista. Escríbenos y te preparamos todo.</p>
         <ul class="vip-points">
           <li>Mesa reservada toda la noche</li>
@@ -127,8 +152,8 @@
           <li>Acceso preferente</li>
         </ul>
         <div class="hero-actions">
-          <a class="btn btn-neon" id="vip-wa" target="_blank" rel="noopener">Reservar por WhatsApp</a>
-          <a class="btn btn-ghost" id="vip-tel">Llamar</a>
+          <a class="btn btn-neon" id="vip-wa" target="_blank" rel="noopener"><span class="btn-label">Reservar por WhatsApp</span><span class="btn-arrow" aria-hidden="true">↗</span></a>
+          <a class="btn btn-ghost" id="vip-tel"><span class="btn-label" id="vip-tel-label">Llamar</span><span class="btn-arrow" aria-hidden="true">→</span></a>
         </div>
       </div>
     </div>
@@ -137,20 +162,25 @@
   <!-- ============ INFO / UBICACIÓN ============ -->
   <section class="section" id="info">
     <div class="container info-grid">
-      <div>
+      <div data-reveal>
         <p class="eyebrow">Cómo llegar</p>
-        <h2 class="section-title">Te esperamos</h2>
+        <h2 class="section-title">Te <span class="outline">esperamos</span></h2>
         <p class="info-address" id="info-address"></p>
         <h3 class="info-sub">Horario</h3>
         <table class="hours" id="hours"></table>
         <p class="info-note">Entrada solo para mayores de 18 años. Imprescindible DNI. Reservado el derecho de admisión.</p>
-        <a class="btn btn-ghost" id="maps-link" target="_blank" rel="noopener">Abrir en Google Maps</a>
+        <a class="btn btn-ghost" id="maps-link" target="_blank" rel="noopener"><span class="btn-label">Abrir en Google Maps</span><span class="btn-arrow" aria-hidden="true">↗</span></a>
       </div>
-      <div class="map-wrap">
+      <div class="map-wrap" data-reveal="scale" style="--d: 2">
         <iframe id="map" title="Mapa de Botanic Chipiona" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
       </div>
     </div>
   </section>
+
+  <!-- ============ CINTA FINAL ============ -->
+  <div class="marquee-wrap marquee-wrap-end" aria-hidden="true">
+    <div class="marquee marquee-solid" data-marquee="Nos vemos en la pista ✦ Botanic Chipiona ✦"></div>
+  </div>
 
   <!-- ============ PIE ============ -->
   <footer class="footer">
@@ -183,6 +213,7 @@
     <button class="lb-nav lb-next" id="lb-next" aria-label="Foto siguiente">&#8250;</button>
   </div>
 
+  <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="data/config.js"></script>

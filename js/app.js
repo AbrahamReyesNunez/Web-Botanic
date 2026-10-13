@@ -145,16 +145,6 @@
     } catch (e) { /* sin almacenamiento: no pasa nada */ }
   }
 
-  /* ---------------- Aviso ---------------- */
-  let toastTimer;
-  function toast(msg) {
-    const t = $("#toast");
-    t.textContent = msg;
-    t.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
-  }
-
   /* =========================================================
      CABECERA
      ========================================================= */
@@ -178,85 +168,8 @@
   }
 
   /* =========================================================
-     PORTADA: próxima noche
+     PORTADA: título neón
      ========================================================= */
-  /* Hora "HH:MM" de apertura (parte 0) o cierre (parte 1) del horario de un día */
-  function horaDe(d, parte, porDefecto) {
-    const txt = (horarioDe(d).split("–")[parte] || porDefecto).trim();
-    const [h, m] = txt.split(":").map(Number);
-    return { h: isNaN(h) ? 0 : h, m: isNaN(m) ? 0 : m, txt };
-  }
-  const apertura = (d) => { const a = horaDe(d, 0, "23:30"); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), a.h, a.m); };
-  const cierre = (d) => { const c = horaDe(d, 1, "06:00"); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, c.h, c.m); };
-
-  /* ¿Estamos abiertos ahora? Si no, ¿cuál es la próxima apertura? */
-  function estadoNoche(now) {
-    const hoy = today();
-    for (const d of [addDays(hoy, -1), hoy]) {
-      if (isOpen(d) && now >= apertura(d) && now < cierre(d)) return { abierto: true, d };
-    }
-    const d = proximasNoches(3).find((x) => apertura(x) > now);
-    return d ? { abierto: false, d } : null;
-  }
-
-  function initCountdown() {
-    const box = $("#countdown");
-    const label = $("#cd-label");
-    const units = $("#cd-units");
-    const open = $("#cd-open");
-    const nums = { d: $("#cd-d"), h: $("#cd-h"), m: $("#cd-m"), s: $("#cd-s") };
-    let estado = null;
-
-    const pintarEstado = () => {
-      estado = estadoNoche(new Date());
-      if (!estado) { box.hidden = true; return false; }
-      const n = noche(estado.d);
-      if (estado.abierto) {
-        label.textContent = `${n.titulo} · hasta las ${horaDe(estado.d, 1, "06:00").txt}`;
-        units.hidden = true;
-        open.hidden = false;
-      } else {
-        const d = estado.d;
-        const esHoy = d.getTime() === today().getTime();
-        const esMan = d.getTime() === addDays(today(), 1).getTime();
-        const cuando = esHoy ? "Hoy" : esMan ? "Mañana" : fechaLarga(d);
-        label.textContent = `Próxima noche · ${cuando} · ${n.titulo}`;
-        units.hidden = false;
-        open.hidden = true;
-      }
-      box.hidden = false;
-      return true;
-    };
-
-    const poner = (node, valor) => {
-      const v = pad(valor);
-      if (node.textContent === v) return;
-      node.textContent = v;
-      if (reducedMotion) return;
-      node.classList.remove("tick");
-      void node.offsetWidth; // reinicia la animación
-      node.classList.add("tick");
-    };
-
-    const tick = () => {
-      if (document.hidden) return;
-      const now = new Date();
-      const objetivo = estado.abierto ? cierre(estado.d) : apertura(estado.d);
-      let falta = Math.max(0, Math.floor((objetivo - now) / 1000));
-      if (falta === 0) { if (pintarEstado()) tick(); return; }
-      if (estado.abierto) return;
-      poner(nums.d, Math.floor(falta / 86400)); falta %= 86400;
-      poner(nums.h, Math.floor(falta / 3600)); falta %= 3600;
-      poner(nums.m, Math.floor(falta / 60));
-      poner(nums.s, falta % 60);
-    };
-
-    if (!pintarEstado()) return;
-    tick();
-    setInterval(tick, 1000);
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
-  }
-
   /* Título neón: cada letra entra por separado */
   function initTitulo() {
     const h1 = $("#neon-title");
@@ -925,7 +838,6 @@
   document.addEventListener("DOMContentLoaded", () => {
     initHeader();
     initTitulo();
-    initCountdown();
     initMarquee();
     initWeek();
     initCalendar();

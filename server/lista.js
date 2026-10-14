@@ -1,7 +1,7 @@
 /* =========================================================
    INSCRIPCIÓN EN LA LISTA
    Capas: campos permitidos → campo trampa → token de formulario →
-   límite por IP → fecha → RPP → nombre → duplicados → topes por noche.
+   límite por IP → fecha → RPP → nombre → duplicados y topes por noche (en el almacén).
    ========================================================= */
 "use strict";
 
@@ -10,6 +10,11 @@ const BotanicNombre = require("../js/compartido/nombre.js");
 const { crearLimitador } = require("./limites.js");
 
 const CAMPOS = new Set(["fecha", "nombre", "rpp", "token", "web"]);
+const RECHAZOS = {
+  duplicado: "Ese nombre ya está en la lista de esta noche.",
+  noche_llena: "La lista de esta noche está completa.",
+  rpp_lleno: "La lista de este RPP para esta noche está completa."
+};
 const DIAS_VISTA_MAX = 180;
 const MIN = 60_000;
 
@@ -66,7 +71,7 @@ function crearLista({ almacen, cal, cfg, secreto, tokenMinMs = 3000, tokenMaxMs 
     let rpp = null;
     if (datos.rpp !== undefined && datos.rpp !== null && datos.rpp !== "") {
       if (typeof datos.rpp !== "string" || !/^[a-z0-9]{4,32}$/.test(datos.rpp)) return error(400, "RPP no válido.");
-      rpp = almacen.rppActivo(datos.rpp);
+      rpp = await almacen.rppActivo(datos.rpp);
       if (!rpp) return error(400, "El link de RPP ya no es válido.");
     }
 
@@ -74,16 +79,11 @@ function crearLista({ almacen, cal, cfg, secreto, tokenMinMs = 3000, tokenMaxMs 
     if (!v.ok) return error(400, v.error);
     const clave = BotanicNombre.clave(v.nombre);
 
-    const noche = almacen.deNoche(fecha);
-    if (noche.some((x) => x.clave === clave)) return error(409, "Ese nombre ya está en la lista de esta noche.");
-    if (topes.maxPorNoche && noche.length >= topes.maxPorNoche) return error(409, "La lista de esta noche está completa.");
-    const codigo = rpp ? rpp.codigo : null;
-    if (rpp && topes.maxPorRppNoche && noche.filter((x) => x.rpp === codigo).length >= topes.maxPorRppNoche) {
-      return error(409, "La lista de este RPP para esta noche está completa.");
-    }
+    // Duplicados y topes los comprueba el almacén al insertar, para que dos altas a la vez no se los salten
+    const r = await almacen.anadir({ fecha, nombre: v.nombre, clave, rpp: rpp ? rpp.codigo : null }, topes);
+    if (!r.ok) return error(409, RECHAZOS[r.motivo] || "No se ha podido completar la inscripción.");
 
     altas.anotar(ip);
-    await almacen.anadir({ fecha, nombre: v.nombre, clave, rpp: codigo });
     return { status: 201, cuerpo: { ok: true, nombre: v.nombre, rpp: rpp ? rpp.nombre : null } };
   }
 

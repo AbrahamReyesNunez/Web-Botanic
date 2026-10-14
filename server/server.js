@@ -1,6 +1,7 @@
 /* =========================================================
-   SERVIDOR DE BOTANIC (sin dependencias)
+   SERVIDOR DE BOTANIC
    Sirve la web y la API de la lista y del panel de administración.
+   Guarda los datos en Supabase si .env lo configura; si no, en data/db (JSON).
    Uso: npm start   (variables en .env, ver .env.example)
    ========================================================= */
 "use strict";
@@ -13,6 +14,7 @@ const crypto = require("node:crypto");
 
 const crearCalendario = require("../js/compartido/calendario.js");
 const { crearAlmacen } = require("./almacen.js");
+const { crearAlmacenSupabase } = require("./almacen-supabase.js");
 const { crearLista } = require("./lista.js");
 const { crearAdmin } = require("./admin.js");
 
@@ -29,7 +31,7 @@ const MIME = {
 };
 
 /* Rutas que nunca se sirven como archivos */
-const PRIVADO = /^\/(server|test|node_modules|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md|actualizar-galeria\.ps1)$|(^|\/)\./;
+const PRIVADO = /^\/(server|test|node_modules|supabase|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md|actualizar-galeria\.ps1)$|(^|\/)\./;
 
 const CABECERAS_SEGURIDAD = {
   "Content-Security-Policy": [
@@ -78,7 +80,9 @@ function cargarEnv() {
 function crearServidor(opciones = {}) {
   const cfg = leerConfig();
   const cal = crearCalendario(cfg, opciones.ahora || ahoraMadrid);
-  const almacen = crearAlmacen(opciones.datos || path.join(RAIZ, "data", "db"));
+  const almacen = opciones.supabase
+    ? crearAlmacenSupabase(opciones.supabase)
+    : crearAlmacen(opciones.datos || path.join(RAIZ, "data", "db"));
   const lista = crearLista({ almacen, cal, cfg, secreto: opciones.secreto || crypto.randomBytes(32), ...opciones.lista });
   const admin = crearAdmin({ almacen, cal, claveAdmin: opciones.claveAdmin });
   const trustProxy = !!opciones.trustProxy;
@@ -153,7 +157,7 @@ function crearServidor(opciones = {}) {
 
     const rppMatch = ruta.match(/^\/api\/rpp\/([a-z0-9]{4,32})$/);
     if (m === "GET" && rppMatch) {
-      const r = almacen.rppActivo(rppMatch[1]);
+      const r = await almacen.rppActivo(rppMatch[1]);
       return r ? enviar(res, 200, { ok: true, codigo: r.codigo, nombre: r.nombre }) : enviar(res, 404, { ok: false, error: "RPP no encontrado." });
     }
 
@@ -172,12 +176,12 @@ function crearServidor(opciones = {}) {
     if (ruta.startsWith("/api/admin/")) {
       if (!admin.autorizado(req)) return enviar(res, 401, { ok: false, error: "Sesión no iniciada." });
       if (m === "POST" && ruta === "/api/admin/logout") return responder(res, admin.logout(req));
-      if (m === "GET" && ruta === "/api/admin/noches") return enviar(res, 200, { ok: true, ...admin.noches() });
-      if (m === "GET" && ruta === "/api/admin/resumen") return responder(res, admin.resumen(url.searchParams.get("fecha")));
-      if (m === "GET" && ruta === "/api/admin/rpps") return responder(res, admin.rpps());
+      if (m === "GET" && ruta === "/api/admin/noches") return enviar(res, 200, { ok: true, ...(await admin.noches()) });
+      if (m === "GET" && ruta === "/api/admin/resumen") return responder(res, await admin.resumen(url.searchParams.get("fecha")));
+      if (m === "GET" && ruta === "/api/admin/rpps") return responder(res, await admin.rpps());
       if (m === "GET" && ruta === "/api/admin/export.csv") {
         const fecha = url.searchParams.get("fecha");
-        const texto = admin.csv(fecha);
+        const texto = await admin.csv(fecha);
         if (texto === null) return enviar(res, 400, { ok: false, error: "Fecha no válida." });
         res.writeHead(200, {
           ...CABECERAS_SEGURIDAD,
@@ -212,7 +216,7 @@ function crearServidor(opciones = {}) {
   return servidor;
 }
 
-module.exports = { crearServidor };
+module.exports = { crearServidor, cargarEnv };
 
 if (require.main === module) {
   cargarEnv();
@@ -221,12 +225,20 @@ if (require.main === module) {
     claveAdmin = crypto.randomBytes(9).toString("base64url");
     console.warn(`\n  ADMIN_KEY no definida (ver .env.example). Clave temporal del panel: ${claveAdmin}\n`);
   }
+  const { SUPABASE_URL, SUPABASE_SECRET_KEY } = process.env;
+  if (!SUPABASE_URL !== !SUPABASE_SECRET_KEY) {
+    console.error("\n  Falta SUPABASE_URL o SUPABASE_SECRET_KEY en .env: hacen falta las dos (o ninguna, para usar JSON).\n");
+    process.exit(1);
+  }
+  const supabase = SUPABASE_URL ? { url: SUPABASE_URL, clave: SUPABASE_SECRET_KEY } : null;
   const puerto = Number(process.env.PORT) || 3000;
   crearServidor({
     claveAdmin,
+    supabase,
     secreto: process.env.FORM_SECRET || undefined,
     trustProxy: process.env.TRUST_PROXY === "1"
   }).listen(puerto, () => {
     console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html`);
+    console.log(supabase ? "  Datos: Supabase" : "  Datos: data/db (JSON). Para usar Supabase, define SUPABASE_URL y SUPABASE_SECRET_KEY.");
   });
 }

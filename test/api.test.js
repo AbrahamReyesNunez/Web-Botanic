@@ -185,7 +185,7 @@ test("login admin limitado a 5 intentos", async () => {
 test("archivos privados y rutas con ../ no se sirven", async () => {
   const s = await arrancar();
   try {
-    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
+    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/schema.sql", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
       assert.equal((await fetch(s.base + ruta)).status, 404, ruta);
     }
     const index = await fetch(`${s.base}/`);

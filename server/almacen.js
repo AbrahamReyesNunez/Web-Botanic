@@ -1,9 +1,10 @@
 /* =========================================================
-   ALMACÉN TEMPORAL EN JSON
+   ALMACÉN EN JSON (desarrollo local y pruebas)
    - rpps.json: lo edita el equipo a mano; se relee solo si cambia.
    - inscripciones.json: lo escribe el servidor. Las escrituras van en
      cola y son atómicas (archivo temporal + rename) para no corromperlo.
-   Cuando haya base de datos real, solo hay que sustituir este módulo.
+   En producción se usa almacen-supabase.js, con la misma interfaz:
+   todo devuelve promesas y anadir() comprueba duplicados y topes.
    ========================================================= */
 "use strict";
 
@@ -53,11 +54,20 @@ function crearAlmacen(dir) {
     return cola;
   }
 
-  async function anadir({ fecha, nombre, clave, rpp }) {
+  const deNoche = (fecha) => inscripciones.filter((x) => x.fecha === fecha);
+
+  /* Node atiende una petición cada vez, así que comprobar e insertar aquí es atómico */
+  async function anadir({ fecha, nombre, clave, rpp }, topes = {}) {
+    const noche = deNoche(fecha);
+    if (noche.some((x) => x.clave === clave)) return { ok: false, motivo: "duplicado" };
+    if (topes.maxPorNoche && noche.length >= topes.maxPorNoche) return { ok: false, motivo: "noche_llena" };
+    if (rpp && topes.maxPorRppNoche && noche.filter((x) => x.rpp === rpp).length >= topes.maxPorRppNoche) {
+      return { ok: false, motivo: "rpp_lleno" };
+    }
     const nueva = { id: crypto.randomUUID(), fecha, nombre, clave, rpp, creado: new Date().toISOString() };
     inscripciones.push(nueva);
     await guardar();
-    return nueva;
+    return { ok: true, inscripcion: nueva };
   }
 
   async function borrar(id) {
@@ -68,9 +78,22 @@ function crearAlmacen(dir) {
     return true;
   }
 
-  const deNoche = (fecha) => inscripciones.filter((x) => x.fecha === fecha);
+  function recuentoNoches() {
+    const cuenta = new Map();
+    for (const x of inscripciones) cuenta.set(x.fecha, (cuenta.get(x.fecha) || 0) + 1);
+    return [...cuenta].map(([fecha, total]) => ({ fecha, total }));
+  }
 
-  return { rpps, rppActivo, deNoche, todas: () => inscripciones, anadir, borrar, esperar: () => cola };
+  return {
+    tipo: "json",
+    rpps: async () => rpps(),
+    rppActivo: async (codigo) => rppActivo(codigo),
+    deNoche: async (fecha) => deNoche(fecha),
+    recuentoNoches: async () => recuentoNoches(),
+    anadir,
+    borrar,
+    esperar: () => cola
+  };
 }
 
 module.exports = { crearAlmacen };

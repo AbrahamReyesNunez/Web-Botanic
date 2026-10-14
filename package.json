@@ -5,9 +5,13 @@
   "description": "Web de Discoteca Botanic Chipiona con lista por RPP",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "comprobar-supabase": "node server/comprobar-supabase.js"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3"
   }
 }

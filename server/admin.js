@@ -56,16 +56,20 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
     return { status: 200, cuerpo: { ok: true }, cabeceras: { "Set-Cookie": `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0` } };
   }
 
-  const nombreRpp = (codigo) => {
-    if (!codigo) return "Sin RPP";
-    const r = almacen.rpps().find((x) => x.codigo === codigo);
-    return r ? r.nombre : `RPP eliminado (${codigo})`;
-  };
+  /* Traduce códigos de RPP a nombres con una sola lectura de la tabla de RPPs */
+  async function nombresRpp() {
+    const lista = await almacen.rpps();
+    const porCodigo = new Map(lista.map((r) => [r.codigo, r.nombre]));
+    const nombre = (codigo) => {
+      if (!codigo) return "Sin RPP";
+      return porCodigo.get(codigo) ?? `RPP eliminado (${codigo})`;
+    };
+    return { lista, nombre };
+  }
 
   /* Noches con inscripciones más las próximas abiertas, de más reciente a más antigua */
-  function noches() {
-    const cuenta = new Map();
-    for (const x of almacen.todas()) cuenta.set(x.fecha, (cuenta.get(x.fecha) || 0) + 1);
+  async function noches() {
+    const cuenta = new Map((await almacen.recuentoNoches()).map((x) => [x.fecha, x.total]));
     for (const d of cal.proximasNoches(8)) { const k = cal.keyOf(d); if (!cuenta.has(k)) cuenta.set(k, 0); }
     const proxima = cal.proximasNoches(1)[0];
     return {
@@ -74,10 +78,11 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
     };
   }
 
-  function resumen(fecha) {
+  async function resumen(fecha) {
     if (!cal.esClaveValida(fecha)) return { status: 400, cuerpo: { ok: false, error: "Fecha no válida." } };
-    const lista = almacen.deNoche(fecha).slice().sort((a, b) => (a.creado < b.creado ? -1 : 1));
-    const grupos = new Map(almacen.rpps().map((r) => [r.codigo, 0]));
+    const [lista, rpps] = await Promise.all([almacen.deNoche(fecha), nombresRpp()]);
+    lista.sort((a, b) => Date.parse(a.creado) - Date.parse(b.creado));
+    const grupos = new Map(rpps.lista.map((r) => [r.codigo, 0]));
     grupos.set(null, 0);
     for (const x of lista) grupos.set(x.rpp, (grupos.get(x.rpp) || 0) + 1);
     return {
@@ -86,20 +91,22 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
         ok: true,
         fecha,
         total: lista.length,
-        porRpp: [...grupos].map(([codigo, total]) => ({ codigo, nombre: nombreRpp(codigo), total })),
-        inscripciones: lista.map((x) => ({ id: x.id, nombre: x.nombre, rpp: nombreRpp(x.rpp), creado: x.creado }))
+        porRpp: [...grupos].map(([codigo, total]) => ({ codigo, nombre: rpps.nombre(codigo), total })),
+        inscripciones: lista.map((x) => ({ id: x.id, nombre: x.nombre, rpp: rpps.nombre(x.rpp), creado: x.creado }))
       }
     };
   }
 
-  function rpps() {
-    return { status: 200, cuerpo: { ok: true, rpps: almacen.rpps().map(({ codigo, nombre, activo }) => ({ codigo, nombre, activo: activo !== false })) } };
+  async function rpps() {
+    const lista = await almacen.rpps();
+    return { status: 200, cuerpo: { ok: true, rpps: lista.map(({ codigo, nombre, activo }) => ({ codigo, nombre, activo: activo !== false })) } };
   }
 
-  function csv(fecha) {
+  async function csv(fecha) {
     if (!cal.esClaveValida(fecha)) return null;
+    const [lista, rpps] = await Promise.all([almacen.deNoche(fecha), nombresRpp()]);
     const filas = [["Nombre", "RPP", "Inscrito"]];
-    for (const x of almacen.deNoche(fecha)) filas.push([x.nombre, nombreRpp(x.rpp), x.creado]);
+    for (const x of lista) filas.push([x.nombre, rpps.nombre(x.rpp), x.creado]);
     return "﻿" + filas.map((f) => f.map(celdaCSV).join(";")).join("\r\n");
   }
 

@@ -229,6 +229,58 @@
   }
 
   /* =========================================================
+     MODO LIGERO: sin aceleración por hardware (o en equipos lentos) los focos,
+     el brillo de los botones y el del cursor bajan la portada a ~14 fps.
+     Se miden los fps un segundo y, si no llegan a 40, se apagan esos efectos.
+     El resultado se guarda junto al renderizador gráfico: el navegador restaura
+     sessionStorage al reabrir las pestañas, y si entretanto se ha activado la
+     aceleración por hardware el renderizador cambia y se vuelve a medir.
+     ========================================================= */
+  const LIGERO_KEY = "botanic_fx_ligero";
+
+  function renderizadorGrafico() {
+    try {
+      const gl = document.createElement("canvas").getContext("webgl");
+      if (!gl) return "sin-webgl";
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      const nombre = gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER);
+      const perder = gl.getExtension("WEBGL_lose_context");
+      if (perder) perder.loseContext();
+      return String(nombre);
+    } catch (e) { return "desconocido"; }
+  }
+
+  function initModoLigero() {
+    if (reducedMotion) return;
+    const activar = () => document.documentElement.classList.add("fx-ligero");
+    const gpu = renderizadorGrafico();
+    try {
+      const guardado = sessionStorage.getItem(LIGERO_KEY);
+      if (guardado === gpu) return activar();
+      if (guardado) sessionStorage.removeItem(LIGERO_KEY);
+    } catch (e) { /* sin almacenamiento */ }
+
+    // Se espera a que acabe la entrada del título para no medir la carga de la página
+    setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      const tiempos = [];
+      let ultimo = 0;
+      const medir = (ahora) => {
+        if (ultimo) tiempos.push(ahora - ultimo);
+        ultimo = ahora;
+        if (tiempos.length < 120 && tiempos.reduce((a, b) => a + b, 0) < 1000) return requestAnimationFrame(medir);
+        if (document.visibilityState !== "visible" || tiempos.length < 5) return;
+        tiempos.sort((a, b) => a - b);
+        if (tiempos[tiempos.length >> 1] > 25) {
+          activar();
+          try { sessionStorage.setItem(LIGERO_KEY, gpu); } catch (e) { /* vale solo para esta carga */ }
+        }
+      };
+      requestAnimationFrame(medir);
+    }, 2500);
+  }
+
+  /* =========================================================
      EFECTOS DE RATÓN: brillo, inclinación 3D, botones magnéticos
      ========================================================= */
   function initPointerFx() {
@@ -822,6 +874,7 @@
     initReveal();
     initParallax();
     initPointerFx();
+    initModoLigero();
 
     // Enlace directo a un día: index.html#dia=2026-10-17
     const m = location.hash.match(/^#dia=(\d{4}-\d{2}-\d{2})$/);

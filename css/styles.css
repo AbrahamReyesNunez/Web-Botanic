@@ -287,13 +287,13 @@ button { font: inherit; color: inherit; }
 .hero-back {
   top: -10%; bottom: -10%;
   z-index: -4;
-  background: url("../img/brand/hojas-arriba.jpg") center top / cover no-repeat;
+  background: url("../img/brand/hojas-arriba.jpg?v=2") center top / cover no-repeat;
   filter: saturate(1.15) brightness(.8);
 }
 .hero-front {
   bottom: -6%; height: 48%;
   z-index: -2;
-  background: url("../img/brand/hojas-abajo.jpg") center bottom / cover no-repeat;
+  background: url("../img/brand/hojas-abajo.jpg?v=2") center bottom / cover no-repeat;
   -webkit-mask-image: linear-gradient(to top, #000 35%, transparent);
   mask-image: linear-gradient(to top, #000 35%, transparent);
   opacity: .55;
@@ -305,20 +305,24 @@ button { font: inherit; color: inherit; }
     linear-gradient(180deg, rgba(5,16,13,.4) 0%, transparent 25%, transparent 70%, var(--bg) 100%);
 }
 
-/* Focos de luz */
-.beams { position: absolute; inset: 0; z-index: -3; overflow: hidden; mix-blend-mode: screen; pointer-events: none; }
+/* Focos de luz. El cono sale de un conic-gradient (bordes suaves sin blur ni clip-path)
+   y se apaga hacia abajo con una máscara: todo estático, así la animación solo gira la capa en la GPU.
+   Van por encima del oscurecido de .hero::after (z-index 0, antes del contenido en el DOM) para que se vean */
+.beams { position: absolute; inset: 0; z-index: 0; overflow: hidden; mix-blend-mode: screen; pointer-events: none; }
 .beam {
   position: absolute; top: -15%;
-  width: 46vmax; height: 140%;
+  width: 90vmax; height: 140%;
   transform-origin: 50% 0;
-  clip-path: polygon(47% 0, 53% 0, 100% 100%, 0 100%);
-  filter: blur(22px);
-  opacity: .45;
+  background: conic-gradient(from 156deg at 50% 0%, transparent, var(--c) 7deg, var(--c) 41deg, transparent 48deg);
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent var(--fade));
+  mask-image: linear-gradient(180deg, #000, transparent var(--fade));
+  opacity: .6;
+  will-change: transform;
   animation: sweep 9s ease-in-out infinite alternate;
 }
-.beam-1 { left: 18%; --from: -28deg; --to: 14deg; background: linear-gradient(180deg, rgba(255,58,216,.9), transparent 78%); }
-.beam-2 { left: 82%; --from: 26deg; --to: -12deg; background: linear-gradient(180deg, rgba(47,224,168,.75), transparent 75%); animation-duration: 11s; }
-.beam-3 { left: 50%; --from: -10deg; --to: 10deg; background: linear-gradient(180deg, rgba(177,75,255,.8), transparent 70%); animation-duration: 7s; opacity: .35; }
+.beam-1 { left: 18%; --from: -28deg; --to: 14deg; --c: rgba(255,58,216,.9); --fade: 78%; }
+.beam-2 { left: 82%; --from: 26deg; --to: -12deg; --c: rgba(47,224,168,.75); --fade: 75%; animation-duration: 11s; }
+.beam-3 { left: 50%; --from: -10deg; --to: 10deg; --c: rgba(177,75,255,.8); --fade: 70%; animation-duration: 7s; opacity: .5; }
 @keyframes sweep {
   from { transform: translateX(-50%) rotate(var(--from)); }
   to { transform: translateX(-50%) rotate(var(--to)); }
@@ -334,7 +338,9 @@ button { font: inherit; color: inherit; }
   line-height: 1;
   color: #fff;
   text-shadow: var(--glow);
-  animation: flicker 6s 2s infinite;
+  /* steps: el parpadeo salta de golpe (como un neón real) y el text-shadow
+     se repinta solo en cada salto, no en cada fotograma */
+  animation: flicker 6s steps(1, end) 2s infinite;
 }
 .neon-title .ch {
   display: inline-block;
@@ -863,11 +869,11 @@ button { font: inherit; color: inherit; }
   position: absolute; top: -12%; bottom: -12%; left: 0; right: 0; z-index: -1;
   background:
     linear-gradient(90deg, var(--bg) 0%, rgba(5,16,13,.92) 40%, rgba(5,16,13,.4) 100%),
-    url("../img/brand/hojas-abajo.jpg") right center / cover no-repeat;
+    url("../img/brand/hojas-arriba.jpg?v=2") right center / cover no-repeat;
   will-change: transform;
 }
 @media (max-width: 760px) {
-  .vip-bg { background: linear-gradient(180deg, rgba(5,16,13,.75), rgba(5,16,13,.95)), url("../img/brand/hojas-abajo.jpg") center / cover no-repeat; }
+  .vip-bg { background: linear-gradient(180deg, rgba(5,16,13,.75), rgba(5,16,13,.95)), url("../img/brand/hojas-arriba.jpg?v=2") center / cover no-repeat; }
 }
 .vip-inner > div { max-width: 580px; }
 .vip-points { list-style: none; padding: 0; margin: 1.4rem 0 0; display: grid; gap: .6rem; }
@@ -925,6 +931,16 @@ button { font: inherit; color: inherit; }
   will-change: transform;
 }
 .cursor-glow.on { opacity: 1; }
+
+/* Modo ligero (js/app.js, initModoLigero): equipos que no llegan a 40 fps */
+/* Los focos se desvanecen; visibility (con retardo) deja de pintarlos al terminar */
+.fx-ligero .beams,
+.fx-ligero .cursor-glow {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 1.5s ease, visibility 0s 1.5s;
+}
+.fx-ligero .btn { animation: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

@@ -50,6 +50,23 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
+
+/* ---------- Barra de desplazamiento neón ---------- */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: var(--bg); box-shadow: inset 1px 0 0 var(--line); }
+::-webkit-scrollbar-thumb {
+  border: 3px solid var(--bg);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--neon), var(--violet) 55%, var(--leaf));
+}
+::-webkit-scrollbar-thumb:hover { border-width: 2px; background: linear-gradient(180deg, var(--neon-soft), var(--neon)); }
+::-webkit-scrollbar-thumb:active { background: var(--leaf); }
+::-webkit-scrollbar-corner { background: var(--bg); }
+/* Firefox (y navegadores sin ::-webkit-scrollbar): en Chrome, scrollbar-color anularía lo de arriba */
+@supports not selector(::-webkit-scrollbar) {
+  html { scrollbar-width: thin; scrollbar-color: var(--neon) var(--bg); }
+}
+
 /* Grano de película: textura de club */
 body::after {
   content: "";

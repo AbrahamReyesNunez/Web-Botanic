@@ -185,7 +185,7 @@
   }
 
   /* =========================================================
-     PARALLAX (portada y VIP)
+     PARALLAX (portada y reservados)
      ========================================================= */
   function initParallax() {
     if (reducedMotion) return;
@@ -207,8 +207,8 @@
         if (enHero) {
           y = -sec.top * depth + my * depth * 40;
         } else {
-          // Desplazamiento según la distancia al centro de la pantalla, limitado al margen de la capa
-          const limite = sec.height * 0.11;
+          // Desplazamiento según la distancia al centro de la pantalla, limitado a lo que la capa sobresale por arriba
+          const limite = Math.max(0, -c.offsetTop) * 0.9;
           y = Math.max(-limite, Math.min(limite, -(sec.top + sec.height / 2 - vh / 2) * depth));
         }
         c.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
@@ -821,13 +821,259 @@
   }
 
   /* =========================================================
-     VIP, INFO Y PIE
+     RESERVADOS: mesa en pista y mesa VIP
+     ========================================================= */
+  const RES = window.BOTANIC_RESERVADOS || { tipos: {}, botellas: [], refrescos: [] };
+  const MAX_UNIDADES = 10;
+  let resTipo = null;      // tipo mostrado en el panel
+  let resLastFocus = null;
+
+  function initReservados() {
+    const panel = $("#res-panel");
+    const opciones = Array.from(document.querySelectorAll(".res-opcion"));
+
+    // Los paneles de todos los tipos van montados y apilados en la misma celda:
+    // así la sección no cambia de alto al abrir o cambiar de mesa (el fondo se recolocaría de golpe)
+    const cards = {};
+    Object.keys(RES.tipos).forEach((tipo) => {
+      const c = buildResPanel(tipo);
+      c.inert = true;
+      c.addEventListener("animationend", (e) => { if (e.target === c) c.classList.remove("is-out"); });
+      cards[tipo] = c;
+      panel.appendChild(c);
+    });
+
+    // Sale el panel actual y entra el nuevo (o se queda cerrado)
+    const mostrar = (tipo) => {
+      const anterior = resTipo;
+      resTipo = tipo;
+      opciones.forEach((o) => {
+        const activa = o.dataset.tipo === tipo;
+        o.classList.toggle("active", activa);
+        o.setAttribute("aria-expanded", String(activa));
+      });
+      if (anterior) {
+        const c = cards[anterior];
+        c.classList.remove("is-in");
+        c.classList.toggle("is-out", !reducedMotion);
+        c.inert = true;
+      }
+      panel.classList.toggle("abierto", Boolean(tipo));
+      panel.classList.toggle("cambio", Boolean(anterior && tipo)); // el nuevo espera a que salga el anterior
+      if (!tipo) return;
+      const c = cards[tipo];
+      c.classList.remove("is-out");
+      c.classList.add("is-in");
+      c.inert = false;
+      if (window.matchMedia("(max-width: 859px)").matches) {
+        requestAnimationFrame(() => panel.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" }));
+      }
+    };
+
+    opciones.forEach((o) => o.addEventListener("click", () => mostrar(resTipo === o.dataset.tipo ? null : o.dataset.tipo)));
+
+    // Formulario
+    const modal = $("#res-modal");
+    $("#res-modal-close").addEventListener("click", cerrarReserva);
+    modal.addEventListener("click", (e) => { if (e.target === modal) cerrarReserva(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) cerrarReserva(); });
+  }
+
+  function buildResPanel(tipo) {
+    const t = RES.tipos[tipo] || {};
+    const box = el("div", { class: `res-card res-card-${tipo}` });
+    const cerrar = el("button", { class: "dp-close", type: "button", "aria-label": "Cerrar" }, "&times;");
+    cerrar.addEventListener("click", () => {
+      const opcion = document.querySelector(`.res-opcion[data-tipo="${tipo}"]`);
+      opcion.click();
+      opcion.focus(); // en móvil el panel encoge la sección: vuelve la vista al botón
+    });
+    box.appendChild(cerrar);
+
+    const cuerpo = el("div", { class: "res-card-cuerpo" }, `
+      <p class="eyebrow">${esc(t.subtitulo)}</p>
+      <h3 class="res-card-titulo">${esc(t.nombre)}</h3>
+      <p class="res-card-desc">${esc(t.descripcion)}</p>
+      <ul class="res-incluye">${(t.incluye || []).map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`);
+    const acciones = el("div", { class: "form-actions" });
+    const reservar = el("button", { class: "btn btn-neon", type: "button" }, btnHTML(`Reservar ${t.nombre.toLowerCase()}`));
+    reservar.addEventListener("click", () => abrirReserva(tipo));
+    acciones.appendChild(reservar);
+    cuerpo.appendChild(acciones);
+    // Cascada: cada bloque entra un poco después del anterior
+    Array.from(cuerpo.children).forEach((c, i) => c.style.setProperty("--d", i));
+    box.appendChild(cuerpo);
+    return box;
+  }
+
+  /* ---------------- Formulario de reserva ---------------- */
+  function abrirReserva(tipo) {
+    resLastFocus = document.activeElement;
+    renderReservaForm(tipo);
+    $("#res-modal").hidden = false;
+    document.body.style.overflow = "hidden";
+    $("#res-modal-close").focus();
+  }
+
+  function cerrarReserva() {
+    $("#res-modal").hidden = true;
+    document.body.style.overflow = "";
+    resLastFocus && resLastFocus.focus();
+  }
+
+  const filasCantidad = (grupo, items) => items.map((nombre, i) => `
+    <li class="qty-row">
+      <span class="qty-nombre">${esc(nombre)}</span>
+      <span class="qty" data-grupo="${grupo}" data-nombre="${esc(nombre)}">
+        <button type="button" class="qty-btn" data-paso="-1" aria-label="Quitar ${esc(nombre)}" disabled>−</button>
+        <output class="qty-n" id="qty-${grupo}-${i}" aria-live="polite">0</output>
+        <button type="button" class="qty-btn" data-paso="1" aria-label="Añadir ${esc(nombre)}">+</button>
+      </span>
+    </li>`).join("");
+
+  function renderReservaForm(tipo) {
+    const cuerpo = $("#res-modal-cuerpo");
+    const noches = proximasNoches(8, true);
+    const t = RES.tipos[tipo] || {};
+    const opcionesNoche = noches.map((d) => `<option value="${keyOf(d)}">${esc(fechaLarga(d))}</option>`).join("");
+
+    cuerpo.innerHTML = `
+      <p class="eyebrow">Reservados</p>
+      <h3 class="res-modal-titulo" id="res-modal-titulo">Solicita tu <span>reserva</span></h3>
+      <p class="list-hint">Te confirmaremos la reserva por WhatsApp o llamada.</p>
+      <form novalidate>
+        <div class="form-grid res-form-grid">
+          <div class="field">
+            <label for="res-tipo">Tipo de mesa</label>
+            <div class="rpp-locked">
+              <input id="res-tipo" value="${esc(t.nombre)}" readonly tabindex="-1" aria-readonly="true">
+              ${ICONO_CANDADO}
+            </div>
+            <input type="hidden" name="tipo" value="${esc(tipo)}">
+          </div>
+          <div class="field">
+            <label for="res-noche">Noche</label>
+            <select id="res-noche" name="noche">${opcionesNoche}</select>
+          </div>
+          <div class="field">
+            <label for="res-nombre">Nombre y apellidos</label>
+            <input id="res-nombre" name="nombre" autocomplete="name" autocapitalize="words" spellcheck="false" required maxlength="${window.BotanicNombre.MAX}">
+          </div>
+          <div class="field">
+            <label for="res-tel">Teléfono</label>
+            <input id="res-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" required maxlength="20">
+          </div>
+          <div class="field">
+            <label for="res-personas">Personas</label>
+            <input id="res-personas" name="personas" type="number" inputmode="numeric" min="1" max="30" value="4" required>
+          </div>
+        </div>
+
+        <fieldset class="res-grupo">
+          <legend>Botellas</legend>
+          <ul class="qty-list">${filasCantidad("botellas", RES.botellas)}</ul>
+        </fieldset>
+        <fieldset class="res-grupo">
+          <legend>Refrescos</legend>
+          <ul class="qty-list">${filasCantidad("refrescos", RES.refrescos)}</ul>
+        </fieldset>
+
+        <div class="field">
+          <label for="res-notas">Comentarios (opcional)</label>
+          <textarea id="res-notas" name="notas" rows="3" maxlength="500" placeholder="Cumpleaños, hora de llegada, alguna petición…"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-neon" type="submit">${btnHTML("Enviar reserva")}</button>
+        </div>
+        <p class="form-error" role="alert" hidden></p>
+        <p class="list-legal">La reserva no es firme hasta que te la confirmemos. Solo para mayores de 18 años.</p>
+      </form>`;
+
+    const form = $("form", cuerpo);
+    const err = $(".form-error", cuerpo);
+    const mostrarError = (msg, campo) => {
+      err.textContent = msg;
+      err.hidden = !msg;
+      form.querySelectorAll("[aria-invalid]").forEach((i) => i.removeAttribute("aria-invalid"));
+      if (campo) { campo.setAttribute("aria-invalid", "true"); campo.focus(); }
+    };
+
+    // Contadores − / +
+    form.addEventListener("click", (e) => {
+      const b = e.target.closest(".qty-btn");
+      if (!b) return;
+      const q = b.parentElement;
+      const out = $(".qty-n", q);
+      const n = Math.max(0, Math.min(MAX_UNIDADES, Number(out.textContent) + Number(b.dataset.paso)));
+      out.textContent = String(n);
+      q.classList.toggle("has", n > 0);
+      q.querySelector('[data-paso="-1"]').disabled = n === 0;
+      q.querySelector('[data-paso="1"]').disabled = n === MAX_UNIDADES;
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const f = form.elements;
+      const v = window.BotanicNombre.validar(f.nombre.value);
+      if (!v.ok) return mostrarError(v.error, f.nombre);
+      const tel = f.telefono.value.replace(/[\s.-]/g, "");
+      if (!/^\+?\d{9,15}$/.test(tel)) return mostrarError("Escribe un teléfono válido.", f.telefono);
+      const personas = Number(f.personas.value);
+      if (!Number.isInteger(personas) || personas < 1 || personas > 30) return mostrarError("Indica cuántas personas venís (1 a 30).", f.personas);
+      if (!f.noche.value) return mostrarError("No hay noches disponibles para reservar.", f.noche);
+      mostrarError("");
+
+      const cantidades = (grupo) => Array.from(form.querySelectorAll(`.qty[data-grupo="${grupo}"]`))
+        .map((q) => ({ nombre: q.dataset.nombre, cantidad: Number($(".qty-n", q).textContent) }))
+        .filter((x) => x.cantidad > 0);
+
+      const datos = {
+        tipo: f.tipo.value,
+        fecha: f.noche.value,
+        nombre: v.nombre,
+        telefono: tel,
+        personas,
+        botellas: cantidades("botellas"),
+        refrescos: cantidades("refrescos"),
+        notas: f.notas.value.trim()
+      };
+      enviarReserva(datos).then(() => renderReservaHecha(datos));
+    });
+
+    $("#res-modal-caja").scrollTop = 0;
+  }
+
+  /* Sin servidor todavía: aquí se conectará el guardado de la reserva */
+  function enviarReserva(datos) {
+    return Promise.resolve(datos);
+  }
+
+  function renderReservaHecha(datos) {
+    const t = RES.tipos[datos.tipo] || {};
+    const lista = (items) => items.map((x) => `${x.cantidad} × ${esc(x.nombre)}`).join(", ");
+    const cuerpo = $("#res-modal-cuerpo");
+    cuerpo.innerHTML = `
+      <div class="list-done">
+        <div class="tick" aria-hidden="true">✓</div>
+        <h4 id="res-modal-titulo">¡Solicitud enviada!</h4>
+        <p>${esc(t.nombre)} · ${esc(fechaLarga(fromKey(datos.fecha)))} · ${datos.personas} ${datos.personas === 1 ? "persona" : "personas"}</p>
+        ${datos.botellas.length ? `<p><strong>Botellas:</strong> ${lista(datos.botellas)}</p>` : ""}
+        ${datos.refrescos.length ? `<p><strong>Refrescos:</strong> ${lista(datos.refrescos)}</p>` : ""}
+        <p>Te escribiremos al ${esc(datos.telefono)} para confirmarla.</p>
+        <button class="btn btn-ghost btn-sm" type="button">${btnHTML("Cerrar")}</button>
+      </div>`;
+    $("button", cuerpo).addEventListener("click", cerrarReserva);
+  }
+
+  /* =========================================================
+     INFO Y PIE
      ========================================================= */
   function initInfo() {
-    const wa = `https://wa.me/${CFG.whatsapp}?text=${encodeURIComponent("Hola Botanic! Quiero información para reservar una mesa VIP 🍾")}`;
+    const wa = `https://wa.me/${CFG.whatsapp}?text=${encodeURIComponent("Hola Botanic! Quiero información para reservar una mesa 🍾")}`;
     $("#vip-wa").href = wa;
     $("#vip-tel").href = `tel:+${CFG.whatsapp}`;
-    $("#vip-tel-label").textContent = `Llamar · ${String(CFG.telefono).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}`;
+    $("#vip-tel-label").textContent = `llámanos al ${String(CFG.telefono).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}`;
 
     $("#info-address").textContent = CFG.direccion;
     $("#ft-address").textContent = CFG.direccion;
@@ -869,6 +1115,7 @@
     initCalendar();
     initGallery();
     initLightbox();
+    initReservados();
     initInfo();
     initRpp();
     initReveal();

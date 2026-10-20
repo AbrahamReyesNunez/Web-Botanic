@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Botanic Chipiona · Discoteca</title>
-  <meta name="description" content="Discoteca Botanic Chipiona. Abrimos de miércoles a sábado desde las 23:30. Consulta la agenda, apúntate a la lista y reserva tu mesa VIP.">
+  <meta name="description" content="Discoteca Botanic Chipiona. Abrimos de miércoles a sábado desde las 23:30. Consulta la agenda, apúntate a la lista y reserva tu mesa.">
   <meta name="theme-color" content="#06120f">
   <meta property="og:title" content="Botanic Chipiona · Discoteca">
-  <meta property="og:description" content="De miércoles a sábado. Agenda, lista y mesas VIP.">
+  <meta property="og:description" content="De miércoles a sábado. Agenda, lista y reservados.">
   <meta property="og:image" content="img/brand/botanic.jpg">
   <link rel="icon" href="img/brand/botanic.jpg">
   <script src="js/arranque.js"></script>
@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=4">
+  <link rel="stylesheet" href="css/styles.css?v=9">
 </head>
 <body>
 
@@ -25,7 +25,7 @@
     <nav class="nav" id="nav" aria-label="Principal">
       <a href="#agenda">Agenda</a>
       <a href="#galeria">Galería</a>
-      <a href="#vip">Mesas VIP</a>
+      <a href="#reservados">Reservados</a>
       <a href="#info">Cómo llegar</a>
       <a href="#agenda" class="btn btn-neon btn-sm" data-ir-proxima><span class="btn-label">Lista</span><span class="btn-arrow" aria-hidden="true">→</span></a>
     </nav>
@@ -51,7 +51,7 @@
 
       <div class="hero-actions">
         <a href="#agenda" class="btn btn-neon" data-ir-proxima><span class="btn-label">Apúntate a la lista</span><span class="btn-arrow" aria-hidden="true">→</span></a>
-        <a href="#vip" class="btn btn-ghost"><span class="btn-label">Reservar mesa VIP</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+        <a href="#reservados" class="btn btn-ghost"><span class="btn-label">Reservar mesa</span><span class="btn-arrow" aria-hidden="true">→</span></a>
       </div>
     </div>
     <a href="#semana" class="scroll-hint" aria-label="Bajar">
@@ -62,7 +62,7 @@
   <!-- ============ CINTA ============ -->
   <div class="marquee-wrap" aria-hidden="true">
     <div class="marquee marquee-solid" data-marquee="Miércoles ✦ Jueves ✦ Viernes ✦ Sábado ✦ Botanic Chipiona ✦"></div>
-    <div class="marquee marquee-outline" data-marquee="Lista ✦ Mesas VIP ✦ Terraza ✦ Hasta las 7:00 ✦" data-reverse></div>
+    <div class="marquee marquee-outline" data-marquee="Lista ✦ Reservados ✦ Terraza ✦ Hasta las 7:00 ✦" data-reverse></div>
   </div>
 
   <!-- ============ ESTA SEMANA ============ -->
@@ -124,24 +124,40 @@
     </div>
   </section>
 
-  <!-- ============ VIP ============ -->
-  <section class="section section-vip" id="vip">
+  <!-- ============ RESERVADOS ============ -->
+  <section class="section section-vip" id="reservados">
     <div class="vip-bg" data-depth="0.15" aria-hidden="true"></div>
-    <div class="container vip-inner">
-      <div data-reveal="left">
+    <div class="container res-grid">
+      <div class="res-intro" data-reveal="left">
         <p class="eyebrow">Reservados</p>
-        <h2 class="section-title">Mesas <span class="outline">VIP</span></h2>
-        <p class="section-lead">Celebra tu cumpleaños, despedida o simplemente tu noche con mesa reservada, botella y la mejor vista de la pista. Escríbenos y te preparamos todo.</p>
-        <ul class="vip-points">
-          <li>Mesa reservada toda la noche</li>
-          <li>Botellas y packs para grupos</li>
-          <li>Acceso preferente</li>
-        </ul>
-        <div class="hero-actions">
-          <a class="btn btn-neon" id="vip-wa" target="_blank" rel="noopener"><span class="btn-label">Reservar por WhatsApp</span><span class="btn-arrow" aria-hidden="true">↗</span></a>
-          <a class="btn btn-ghost" id="vip-tel"><span class="btn-label" id="vip-tel-label">Llamar</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+        <h2 class="section-title">Reserva tu <span class="outline">mesa</span></h2>
+        <p class="section-lead">Cumpleaños, despedidas o simplemente tu noche. Elige dónde quieres vivirla.</p>
+        <div class="res-opciones">
+          <button class="res-opcion" type="button" data-tipo="pista" aria-expanded="false" aria-controls="res-panel">
+            <span class="res-opcion-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+            </span>
+            <span class="res-opcion-txt">
+              <span class="res-opcion-titulo">Mesa en pista</span>
+              <span class="res-opcion-sub">En mitad de la fiesta</span>
+            </span>
+            <span class="res-opcion-flecha" aria-hidden="true">→</span>
+          </button>
+          <button class="res-opcion" type="button" data-tipo="vip" aria-expanded="false" aria-controls="res-panel">
+            <span class="res-opcion-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 11V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v3"/><path d="M3 13a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3z"/><path d="M6 18v2M18 18v2"/></svg>
+            </span>
+            <span class="res-opcion-txt">
+              <span class="res-opcion-titulo">Mesa VIP</span>
+              <span class="res-opcion-sub">Sillones y zona privada</span>
+            </span>
+            <span class="res-opcion-flecha" aria-hidden="true">→</span>
+          </button>
         </div>
+        <p class="res-dudas">¿Dudas? <a id="vip-wa" target="_blank" rel="noopener">Escríbenos por WhatsApp</a> o <a id="vip-tel"><span id="vip-tel-label">llámanos</span></a></p>
       </div>
+
+      <div class="res-panel" id="res-panel" aria-live="polite"></div>
     </div>
   </section>
 
@@ -199,13 +215,22 @@
     <button class="lb-nav lb-next" id="lb-next" aria-label="Foto siguiente">&#8250;</button>
   </div>
 
+  <!-- ============ FORMULARIO DE RESERVA ============ -->
+  <div class="res-modal" id="res-modal" role="dialog" aria-modal="true" aria-labelledby="res-modal-titulo" hidden>
+    <div class="res-modal-caja" id="res-modal-caja">
+      <button class="dp-close" id="res-modal-close" type="button" aria-label="Cerrar">&times;</button>
+      <div id="res-modal-cuerpo"></div>
+    </div>
+  </div>
+
   <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
 
   <script src="data/config.js"></script>
   <script src="data/eventos.js"></script>
   <script src="data/galeria.js"></script>
+  <script src="data/reservados.js"></script>
   <script src="js/compartido/calendario.js"></script>
   <script src="js/compartido/nombre.js"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/app.js?v=7"></script>
 </body>
 </html>

@@ -188,7 +188,9 @@
      PARALLAX (portada y reservados)
      ========================================================= */
   function initParallax() {
-    if (reducedMotion) return;
+    // En pantallas táctiles el scroll va por su cuenta y este JS llega un fotograma tarde: las capas
+    // irían a tirones detrás del dedo. Ahí la portada se mueve con CSS (animation-timeline) y el resto queda fijo
+    if (reducedMotion || !finePointer) return;
     const capas = Array.from(document.querySelectorAll("[data-depth]"));
     if (!capas.length) return;
     const hero = $("#inicio");

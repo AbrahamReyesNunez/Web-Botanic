@@ -225,6 +225,8 @@ button { font: inherit; color: inherit; }
   transition: opacity .3s ease;
 }
 .topbar.scrolled { height: 60px; border-color: var(--line); }
+/* En táctil la cabecera no encoge al empezar a bajar: el logo daba un saltito justo al arrancar el scroll */
+@media not all and (hover: hover) and (pointer: fine) { .topbar { height: 60px; } }
 .topbar.scrolled::before {
   opacity: 1;
   background: rgba(5, 16, 13, .78);
@@ -315,6 +317,21 @@ button { font: inherit; color: inherit; }
   mask-image: linear-gradient(to top, #000 35%, transparent);
   opacity: .55;
 }
+/* Pantallas táctiles: el parallax de la portada lo mueve el navegador ligado al scroll (sin JS, sin tirones).
+   Mismo recorrido que el JS de escritorio: cada capa baja scroll × data-depth mientras se ve la portada.
+   Sin soporte de animation-timeline, las capas se quedan quietas */
+@media not all and (hover: hover) and (pointer: fine) {
+  @supports (animation-timeline: scroll()) {
+    .hero-back, .hero-front {
+      animation: heroParallax linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 100svh;
+    }
+    .hero-back { --depth: .12; }
+    .hero-front { --depth: .32; }
+  }
+}
+@keyframes heroParallax { to { transform: translate3d(0, calc(100svh * var(--depth)), 0); } }
 .hero::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background:
@@ -484,9 +501,16 @@ button { font: inherit; color: inherit; }
     margin: 0 calc(var(--gutter) * -1);
     padding-left: var(--gutter); padding-right: var(--gutter);
     scrollbar-width: none;
+    /* Solo se desliza en horizontal: con overflow-x: auto, cualquier cosa que sobresalga
+       por abajo creaba un pequeño scroll vertical dentro de la tira */
+    overflow-y: hidden;
   }
   .week-strip::-webkit-scrollbar { display: none; }
   .week-item { scroll-snap-align: start; }
+  /* Las tarjetas que quedan fuera por la derecha no aparecen hasta que se desliza: en vez de subir
+     46px (sobresaldrían por abajo), entran con un leve zoom que no se sale de la tira */
+  .js .week-strip [data-reveal] { transform: scale(.94); }
+  .js .week-strip [data-reveal].is-in { transform: none; }
 }
 @media (min-width: 560px) and (max-width: 900px) { .week-strip { grid-auto-columns: 42%; } }
 

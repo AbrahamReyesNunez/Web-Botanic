@@ -823,7 +823,8 @@
   /* =========================================================
      RESERVADOS: mesa en pista y mesa VIP
      ========================================================= */
-  const RES = window.BOTANIC_RESERVADOS || { tipos: {}, botellas: [], refrescos: [] };
+  const RES = window.BOTANIC_RESERVADOS || { tipos: {}, precios: {}, botellas: [], chupitos: [], champan: [], refrescos: [] };
+  const Reservas = window.BotanicReservas; // precios y buscador (js/compartido/reservas.js)
   const MAX_UNIDADES = 10;
   let resTipo = null;      // tipo mostrado en el panel
   let resLastFocus = null;
@@ -921,77 +922,172 @@
     resLastFocus && resLastFocus.focus();
   }
 
-  const filasCantidad = (grupo, items) => items.map((nombre, i) => `
-    <li class="qty-row">
-      <span class="qty-nombre">${esc(nombre)}</span>
-      <span class="qty" data-grupo="${grupo}" data-nombre="${esc(nombre)}">
-        <button type="button" class="qty-btn" data-paso="-1" aria-label="Quitar ${esc(nombre)}" disabled>−</button>
-        <output class="qty-n" id="qty-${grupo}-${i}" aria-live="polite">0</output>
-        <button type="button" class="qty-btn" data-paso="1" aria-label="Añadir ${esc(nombre)}">+</button>
-      </span>
-    </li>`).join("");
+  /* Bloques del formulario: un buscador por tipo de bebida */
+  const GRUPOS_RES = {
+    botellas: { titulo: "Botellas", placeholder: "Busca ron, ginebra, whisky, vodka…", paso: 1 },
+    chupitos: { titulo: "Botellas de chupito", placeholder: "Busca tequila de fresa, mango…", paso: 3 },
+    champan: { titulo: "Champán", placeholder: "Busca Moët…", paso: 3 },
+    refrescos: { titulo: "Refrescos", placeholder: "Busca Coca-Cola, tónica, Sprite…", paso: 2 }
+  };
+  const PASOS_RES = ["Noche", "Botellas", "Refrescos", "Extras", "Tus datos"];
+  const ULTIMO_PASO = PASOS_RES.length - 1;
+  const DIAS_CORTOS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const euros = (n) => `${n} €`;
+  const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  const ICONO_LUPA = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>`;
+
+  const buscadorHTML = (grupo) => {
+    const g = GRUPOS_RES[grupo];
+    const atajos = [...new Set((RES[grupo] || []).map((i) => i.categoria).filter(Boolean))];
+    return `
+      <div class="res-grupo" data-grupo="${grupo}">
+        ${atajos.length ? `
+        <div class="res-atajos" role="group" aria-label="Ver por tipo">
+          ${atajos.map((a) => `<button type="button" class="res-atajo" data-atajo="${esc(a)}" aria-pressed="false">${esc(a)}</button>`).join("")}
+        </div>` : ""}
+        <div class="res-buscar">
+          ${ICONO_LUPA}
+          <input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="res-sug-${grupo}"
+            aria-label="Buscar ${esc(g.titulo.toLowerCase())}" placeholder="${esc(g.placeholder)}"
+            autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+          <ul class="res-sugerencias" id="res-sug-${grupo}" role="listbox" aria-label="Sugerencias" hidden></ul>
+        </div>
+        <p class="res-grupo-aviso" role="status" hidden></p>
+        <ul class="res-elegidos" aria-label="${esc(g.titulo)} elegidos"></ul>
+      </div>`;
+  };
+
+  const extraHTML = (grupo, nota) => `
+    <details class="res-extra">
+      <summary>
+        <span class="res-extra-txt">
+          <span class="res-extra-titulo">${esc(GRUPOS_RES[grupo].titulo)}</span>
+          <span class="res-extra-nota">${nota}</span>
+        </span>
+        <span class="res-extra-n" data-grupo="${grupo}" hidden></span>
+        <span class="res-extra-mas" aria-hidden="true"></span>
+      </summary>
+      ${buscadorHTML(grupo)}
+    </details>`;
 
   function renderReservaForm(tipo) {
     const cuerpo = $("#res-modal-cuerpo");
+    const caja = $("#res-modal-caja");
     const noches = proximasNoches(8, true);
     const t = RES.tipos[tipo] || {};
-    const opcionesNoche = noches.map((d) => `<option value="${keyOf(d)}">${esc(fechaLarga(d))}</option>`).join("");
+    const P = RES.precios || {};
+    const porBotella = P.refrescosPorBotella || 0;
+    const powerKing = (RES.refrescos || []).find((r) => r.suplemento);
+
+    const tarjetasNoche = noches.map((d) => {
+      const k = keyOf(d);
+      const ev = (EVENTOS[k] || {}).titulo;
+      return `
+        <label class="res-noche">
+          <input type="radio" name="noche" value="${k}">
+          <span class="res-noche-dia">${DIAS_CORTOS[d.getDay()]}</span>
+          <span class="res-noche-num">${d.getDate()}</span>
+          <span class="res-noche-mes">${MESES[d.getMonth()].slice(0, 3)}</span>
+          <span class="res-noche-precio">desde ${euros(Reservas.precioDe(RES, "botellas", {}, d.getDay()))}</span>
+          ${ev ? `<span class="res-noche-evento">${esc(ev)}</span>` : ""}
+        </label>`;
+    }).join("");
 
     cuerpo.innerHTML = `
-      <p class="eyebrow">Reservados</p>
+      <p class="eyebrow">Reservados · ${esc(t.nombre)}</p>
       <h3 class="res-modal-titulo" id="res-modal-titulo">Solicita tu <span>reserva</span></h3>
-      <p class="list-hint">Te confirmaremos la reserva por WhatsApp o llamada.</p>
+      <ol class="res-pasos" aria-label="Pasos de la reserva">
+        ${PASOS_RES.map((p, i) => `
+          <li><button type="button" class="res-paso-btn" data-ir="${i}">
+            <span class="res-paso-n" aria-hidden="true">${i + 1}</span><span class="res-paso-txt">${p}</span>
+          </button></li>`).join("")}
+      </ol>
+
       <form novalidate>
-        <div class="form-grid res-form-grid">
-          <div class="field">
-            <label for="res-tipo">Tipo de mesa</label>
-            <div class="rpp-locked">
-              <input id="res-tipo" value="${esc(t.nombre)}" readonly tabindex="-1" aria-readonly="true">
-              ${ICONO_CANDADO}
+        <input type="hidden" name="tipo" value="${esc(tipo)}">
+
+        <section class="res-paso" aria-labelledby="res-p0">
+          <h4 class="res-paso-titulo" id="res-p0" tabindex="-1">¿Qué noche venís?</h4>
+          <p class="res-paso-sub">El precio de las botellas cambia según el día.</p>
+          ${noches.length
+            ? `<div class="res-noches" role="radiogroup" aria-labelledby="res-p0">${tarjetasNoche}</div>`
+            : `<p class="res-paso-sub">Ahora mismo no hay noches disponibles para reservar.</p>`}
+        </section>
+
+        <section class="res-paso" aria-labelledby="res-p1" hidden>
+          <h4 class="res-paso-titulo" id="res-p1" tabindex="-1">Elige tus botellas</h4>
+          <p class="res-paso-sub">Cada botella incluye <strong>${porBotella} refrescos</strong>${t.minBotellas ? ` · mínimo ${plural(t.minBotellas, "botella", "botellas")} en esta mesa` : ""}.</p>
+          ${buscadorHTML("botellas")}
+        </section>
+
+        <section class="res-paso" aria-labelledby="res-p2" hidden>
+          <h4 class="res-paso-titulo" id="res-p2" tabindex="-1">Tus refrescos incluidos</h4>
+          <p class="res-paso-sub">Elige todos los refrescos que van con tus botellas.${powerKing ? ` ${esc(powerKing.nombre)}: +${euros(powerKing.suplemento)} a la reserva, sea 1 lata o 10.` : ""}</p>
+          <div class="res-medidor">
+            <div class="res-huecos" aria-hidden="true"></div>
+            <p class="res-medidor-txt" aria-live="polite"></p>
+          </div>
+          ${buscadorHTML("refrescos")}
+        </section>
+
+        <section class="res-paso" aria-labelledby="res-p3" hidden>
+          <h4 class="res-paso-titulo" id="res-p3" tabindex="-1">¿Algo más para la mesa?</h4>
+          <p class="res-paso-sub">Opcional: si no quieres nada más, pasa al siguiente paso.</p>
+          ${extraHTML("chupitos", `${euros(P.chupito)} la botella, cualquier noche`)}
+          ${extraHTML("champan", "Moët · precio a consultar")}
+        </section>
+
+        <section class="res-paso" aria-labelledby="res-p4" hidden>
+          <h4 class="res-paso-titulo" id="res-p4" tabindex="-1">Tus datos</h4>
+          <p class="res-paso-sub">Te confirmaremos la reserva por WhatsApp o llamada.</p>
+          <div class="form-grid res-form-grid">
+            <div class="field res-campo-ancho">
+              <label for="res-nombre">Nombre y apellidos</label>
+              <input id="res-nombre" name="nombre" autocomplete="name" autocapitalize="words" spellcheck="false" required maxlength="${window.BotanicNombre.MAX}">
             </div>
-            <input type="hidden" name="tipo" value="${esc(tipo)}">
+            <div class="field">
+              <label for="res-tel">Teléfono</label>
+              <input id="res-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" required maxlength="20">
+            </div>
+            <div class="field">
+              <label for="res-personas">Personas</label>
+              <input id="res-personas" name="personas" type="number" inputmode="numeric" min="1" max="30" value="4" required>
+            </div>
+            <div class="field res-campo-ancho">
+              <label for="res-notas">Comentarios (opcional)</label>
+              <textarea id="res-notas" name="notas" rows="2" maxlength="500" placeholder="Cumpleaños, hora de llegada, alguna petición…"></textarea>
+            </div>
           </div>
-          <div class="field">
-            <label for="res-noche">Noche</label>
-            <select id="res-noche" name="noche">${opcionesNoche}</select>
-          </div>
-          <div class="field">
-            <label for="res-nombre">Nombre y apellidos</label>
-            <input id="res-nombre" name="nombre" autocomplete="name" autocapitalize="words" spellcheck="false" required maxlength="${window.BotanicNombre.MAX}">
-          </div>
-          <div class="field">
-            <label for="res-tel">Teléfono</label>
-            <input id="res-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" required maxlength="20">
-          </div>
-          <div class="field">
-            <label for="res-personas">Personas</label>
-            <input id="res-personas" name="personas" type="number" inputmode="numeric" min="1" max="30" value="4" required>
-          </div>
-        </div>
+          <section class="res-carrito" aria-labelledby="res-carrito-titulo">
+            <h5 class="res-carrito-titulo" id="res-carrito-titulo">Tu reserva</h5>
+            <div class="res-carrito-cuerpo"></div>
+            <p class="res-pago">El reservado se paga en la puerta de la discoteca.</p>
+          </section>
+          <p class="list-legal">La reserva no es firme hasta que te la confirmemos. Solo para mayores de 18 años.</p>
+        </section>
 
-        <fieldset class="res-grupo">
-          <legend>Botellas</legend>
-          <ul class="qty-list">${filasCantidad("botellas", RES.botellas)}</ul>
-        </fieldset>
-        <fieldset class="res-grupo">
-          <legend>Refrescos</legend>
-          <ul class="qty-list">${filasCantidad("refrescos", RES.refrescos)}</ul>
-        </fieldset>
-
-        <div class="field">
-          <label for="res-notas">Comentarios (opcional)</label>
-          <textarea id="res-notas" name="notas" rows="3" maxlength="500" placeholder="Cumpleaños, hora de llegada, alguna petición…"></textarea>
-        </div>
-
-        <div class="form-actions">
-          <button class="btn btn-neon" type="submit">${btnHTML("Enviar reserva")}</button>
-        </div>
         <p class="form-error" role="alert" hidden></p>
-        <p class="list-legal">La reserva no es firme hasta que te la confirmemos. Solo para mayores de 18 años.</p>
+
+        <div class="res-barra">
+          <div class="res-barra-info">
+            <span class="res-barra-resumen"></span>
+            <strong class="res-barra-total"></strong>
+          </div>
+          <div class="res-barra-acciones">
+            <button type="button" class="btn btn-ghost btn-sm res-atras" aria-label="Atrás">${btnHTML("Atrás", "←")}</button>
+            <button type="submit" class="btn btn-neon btn-sm res-siguiente"></button>
+          </div>
+        </div>
       </form>`;
 
     const form = $("form", cuerpo);
     const err = $(".form-error", cuerpo);
+    const secciones = Array.from(form.querySelectorAll(".res-paso"));
+    const botonesPaso = Array.from(cuerpo.querySelectorAll(".res-paso-btn"));
+    const atras = $(".res-atras", form);
+    const siguiente = $(".res-siguiente", form);
+    const totalBarra = $(".res-barra-total", form);
+
     const mostrarError = (msg, campo) => {
       err.textContent = msg;
       err.hidden = !msg;
@@ -999,21 +1095,428 @@
       if (campo) { campo.setAttribute("aria-invalid", "true"); campo.focus(); }
     };
 
-    // Contadores − / +
+    /* ---------- Estado ---------- */
+    const carrito = new Map(); // "grupo|nombre" -> cantidad
+    let paso = 0;
+    let visitado = 0;
+    let ultimo = null;          // última bebida añadida (para animarla)
+    let refrescosAntes = 0;     // para rellenar solo los huecos nuevos del medidor
+    let totalAntes = null;
+
+    const clave = (grupo, nombre) => `${grupo}|${nombre}`;
+    const cantidadDe = (grupo, nombre) => carrito.get(clave(grupo, nombre)) || 0;
+    const listaCarrito = () => Array.from(carrito, ([k, cantidad]) => {
+      const [grupo, nombre] = k.split("|");
+      return { grupo, nombre, cantidad };
+    });
+    const nocheElegida = () => (form.querySelector('input[name="noche"]:checked') || {}).value || "";
+    const diaElegido = () => (nocheElegida() ? fromKey(nocheElegida()).getDay() : null);
+    const calculo = () => Reservas.calcular(RES, listaCarrito(), diaElegido(), tipo);
+    const buscadorDe = (grupo) => $(`.res-grupo[data-grupo="${grupo}"] [role="combobox"]`, form);
+
+    /* Qué le falta a un paso para poder seguir ("" si está completo) y dónde mandar el foco */
+    function faltaEnPaso(i, r) {
+      if (i === 0 && !nocheElegida()) {
+        return { msg: "Elige la noche que venís.", campo: form.querySelector('input[name="noche"]') };
+      }
+      if (i === 1 && r.botellas < r.minBotellas) {
+        const faltan = r.minBotellas - r.botellas;
+        return { msg: `${t.nombre} lleva mínimo ${plural(r.minBotellas, "botella", "botellas")}: elige ${faltan === 1 ? "1 más" : `${faltan} más`}.`, campo: buscadorDe("botellas") };
+      }
+      if (i === 2 && r.refrescos !== r.refrescosMax) {
+        const d = r.refrescosMax - r.refrescos;
+        return {
+          msg: d > 0
+            ? `Te ${d === 1 ? "falta 1 refresco" : `faltan ${d} refrescos`} por elegir: con tus botellas van ${r.refrescosMax}.`
+            : `Te ${-d === 1 ? "sobra 1 refresco" : `sobran ${-d} refrescos`}: con tus botellas van ${r.refrescosMax}.`,
+          campo: buscadorDe("refrescos")
+        };
+      }
+      return null;
+    }
+    const primerIncompleto = (r) => {
+      for (let i = 0; i < ULTIMO_PASO; i++) if (faltaEnPaso(i, r)) return i;
+      return ULTIMO_PASO;
+    };
+
+    const avisar = (grupo, msg) => {
+      const aviso = $(`.res-grupo[data-grupo="${grupo}"] .res-grupo-aviso`, form);
+      aviso.textContent = msg;
+      aviso.hidden = !msg;
+    };
+
+    /* Cambia la cantidad de una bebida. Devuelve false si no se puede (límites) */
+    function cambiar(grupo, nombre, delta) {
+      const n = cantidadDe(grupo, nombre) + delta;
+      // Los refrescos solo tienen el límite total; el resto, MAX_UNIDADES de cada
+      if (delta > 0 && grupo !== "refrescos" && n > MAX_UNIDADES) {
+        avisar(grupo, `Máximo ${MAX_UNIDADES} de cada. Si necesitas más, escríbelo en comentarios.`);
+        return false;
+      }
+      if (delta > 0 && grupo === "refrescos") {
+        const r = calculo();
+        if (r.refrescos + delta > r.refrescosMax) {
+          avisar(grupo, `Ya tienes los ${r.refrescosMax} refrescos incluidos. Quita alguno o añade otra botella.`);
+          return false;
+        }
+      }
+      avisar(grupo, "");
+      if (n <= 0) carrito.delete(clave(grupo, nombre));
+      else carrito.set(clave(grupo, nombre), n);
+      ultimo = delta > 0 ? clave(grupo, nombre) : null;
+      mostrarError("");
+      repintar();
+      return true;
+    }
+
+    /* Cantidad escrita a mano: se ajusta al máximo posible y avisa si se pasa */
+    function fijar(grupo, nombre, n) {
+      const r = calculo();
+      const tope = grupo === "refrescos" ? r.refrescosMax - r.refrescos + cantidadDe(grupo, nombre) : MAX_UNIDADES;
+      if (n > tope) {
+        n = Math.max(0, tope);
+        avisar(grupo, grupo === "refrescos"
+          ? `Con tus botellas van ${r.refrescosMax} refrescos: de ${nombre} puedes poner hasta ${n}.`
+          : `Máximo ${MAX_UNIDADES} de cada. Si necesitas más, escríbelo en comentarios.`);
+      } else avisar(grupo, "");
+      if (n <= 0) carrito.delete(clave(grupo, nombre));
+      else carrito.set(clave(grupo, nombre), n);
+      ultimo = null;
+      mostrarError("");
+      repintar();
+    }
+
+    const precioTexto = (grupo, item) => {
+      const p = Reservas.precioDe(RES, grupo, item, diaElegido());
+      if (p === null) return "A consultar";
+      if (grupo === "refrescos") return item.suplemento ? `Incluido · +${euros(item.suplemento)}` : "Incluido";
+      return euros(p);
+    };
+    const etiquetaPremium = (item) => (item.premium ? ` <span class="tag-premium">Premium</span>` : "");
+
+    /* ---------- Pintado ---------- */
+    function pintarElegidos(grupo, r) {
+      const lista = $(`.res-grupo[data-grupo="${grupo}"] .res-elegidos`, form);
+      const lleno = grupo === "refrescos" && r.refrescos >= r.refrescosMax;
+      lista.innerHTML = r.lineas.filter((l) => l.grupo === grupo).map((l) => {
+        const item = (RES[grupo] || []).find((i) => i.nombre === l.nombre) || {};
+        const precio = grupo === "refrescos" ? precioTexto(grupo, item) : l.subtotal === null ? "A consultar" : euros(l.subtotal);
+        const detalle = l.precio && l.cantidad > 1 ? `<span class="res-linea-ud">${l.cantidad} × ${euros(l.precio)}</span>` : "";
+        const tope = grupo === "refrescos" ? lleno : l.cantidad >= MAX_UNIDADES;
+        return `
+          <li class="res-elegido${ultimo === clave(grupo, l.nombre) ? " nuevo" : ""}" data-grupo="${grupo}" data-nombre="${esc(l.nombre)}">
+            <span class="res-elegido-check" aria-hidden="true">✓</span>
+            <span class="res-elegido-nombre">${esc(l.nombre)}${etiquetaPremium(l)}</span>
+            <span class="qty has">
+              <button type="button" class="qty-btn" data-paso="-1" aria-label="Quitar un ${esc(l.nombre)}">−</button>
+              <input class="qty-n" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${l.cantidad}" aria-label="Cantidad de ${esc(l.nombre)}" autocomplete="off">
+              <button type="button" class="qty-btn" data-paso="1" aria-label="Añadir otro ${esc(l.nombre)}"${tope ? " disabled" : ""}>+</button>
+            </span>
+            <span class="res-linea-precio">${detalle}<strong>${precio}</strong></span>
+          </li>`;
+      }).join("");
+      const badge = form.querySelector(`.res-extra-n[data-grupo="${grupo}"]`);
+      if (badge) {
+        const n = r.lineas.filter((l) => l.grupo === grupo).reduce((s, l) => s + l.cantidad, 0);
+        badge.textContent = n ? `${n} ${n === 1 ? "elegida" : "elegidas"}` : "";
+        badge.hidden = !n;
+      }
+    }
+
+    function pintarMedidor(r) {
+      const huecos = $(".res-huecos", form);
+      const total = Math.max(r.refrescosMax, r.refrescos);
+      // Un grupo de huecos por botella (en móvil, cada botella en su fila)
+      let html = "";
+      for (let i = 0; i < total; i++) {
+        const cls = ["res-hueco"];
+        if (i < r.refrescos) cls.push("lleno");
+        if (i >= refrescosAntes && i < r.refrescos) cls.push("nuevo");
+        if (i >= r.refrescosMax) cls.push("sobra");
+        if (porBotella && i % porBotella === 0) html += (i ? "</span>" : "") + `<span class="res-huecos-botella">`;
+        html += `<span class="${cls.join(" ")}" style="--i:${Math.max(0, i - refrescosAntes)}"></span>`;
+      }
+      huecos.innerHTML = html + (total && porBotella ? "</span>" : "");
+      refrescosAntes = r.refrescos;
+
+      const d = r.refrescosMax - r.refrescos;
+      const txt = $(".res-medidor-txt", form);
+      txt.className = "res-medidor-txt" + (d === 0 && r.refrescosMax ? " ok" : d < 0 ? " mal" : "");
+      txt.innerHTML = !r.refrescosMax
+        ? "Elige primero tus botellas."
+        : `<strong>${r.refrescos} / ${r.refrescosMax}</strong> ${d > 0 ? `· te ${d === 1 ? "falta 1" : `faltan ${d}`}` : d < 0 ? `· te ${-d === 1 ? "sobra 1" : `sobran ${-d}`}: quita alguno` : "· ¡completos!"}`;
+    }
+
+    function pintarBarra(r) {
+      const partes = [];
+      if (r.botellas) partes.push(plural(r.botellas, "botella", "botellas"));
+      if (r.refrescosMax) partes.push(`${r.refrescos}/${r.refrescosMax} refrescos`);
+      const extras = r.lineas.filter((l) => l.grupo === "chupitos" || l.grupo === "champan").reduce((s, l) => s + l.cantidad, 0);
+      if (extras) partes.push(`${plural(extras, "extra", "extras")}`);
+      $(".res-barra-resumen", form).textContent = partes.length ? partes.join(" · ") : nocheElegida() ? fechaLarga(fromKey(nocheElegida())) : "Tu reserva";
+      const total = euros(r.total) + (r.aConsultar ? "*" : "");
+      if (totalBarra.textContent !== total) {
+        totalBarra.textContent = total;
+        if (totalAntes !== null) {
+          totalBarra.classList.remove("pop");
+          void totalBarra.offsetWidth; // reinicia la animación
+          totalBarra.classList.add("pop");
+        }
+        totalAntes = total;
+      }
+    }
+
+    function pintarPasos(r) {
+      const tope = primerIncompleto(r);
+      botonesPaso.forEach((b, i) => {
+        const hecho = i !== paso && i <= visitado && !faltaEnPaso(i, r) && i < ULTIMO_PASO;
+        b.classList.toggle("hecho", hecho);
+        b.classList.toggle("actual", i === paso);
+        b.disabled = i > tope || i > visitado + 1;
+        if (i === paso) b.setAttribute("aria-current", "step");
+        else b.removeAttribute("aria-current");
+      });
+      $(".res-pasos", cuerpo).style.setProperty("--progreso", paso / ULTIMO_PASO);
+    }
+
+    function pintarResumen(r) {
+      const destino = $(".res-carrito-cuerpo", form);
+      const noche = nocheElegida();
+      const cab = `<p class="res-carrito-cab">${esc(t.nombre)}${noche ? ` · ${esc(fechaLarga(fromKey(noche)))}` : ""}</p>`;
+      const grupos = Object.keys(GRUPOS_RES).map((grupo) => {
+        const lineas = r.lineas.filter((l) => l.grupo === grupo);
+        if (!lineas.length) return "";
+        return `
+          <li class="res-carrito-grupo">
+            <span>${esc(GRUPOS_RES[grupo].titulo)}</span>
+            <button type="button" class="res-editar" data-ir="${GRUPOS_RES[grupo].paso}">Cambiar</button>
+          </li>
+          ${lineas.map((l) => `
+            <li class="res-linea">
+              <span class="res-linea-nombre"><span class="res-linea-cant">${l.cantidad}×</span> ${esc(l.nombre)}${etiquetaPremium(l)}</span>
+              <span class="res-linea-precio"><strong>${grupo === "refrescos" ? "Incluido" : l.subtotal === null ? "A consultar" : euros(l.subtotal)}</strong></span>
+            </li>`).join("")}`;
+      }).join("");
+      const extras = r.suplementos.map((s) => `
+        <li class="res-linea res-linea-extra">
+          <span class="res-linea-nombre">Suplemento ${esc(s.nombre)}</span>
+          <span class="res-linea-precio"><strong>+${euros(s.importe)}</strong></span>
+        </li>`).join("");
+      destino.innerHTML = `
+        ${cab}
+        <ul class="res-carrito-lista">${grupos}${extras}</ul>
+        <div class="res-total">
+          <span>Total${r.aConsultar ? " <small>* + champán a consultar</small>" : ""}</span>
+          <strong>${euros(r.total)}</strong>
+        </div>`;
+    }
+
+    function repintar() {
+      const r = calculo();
+      Object.keys(GRUPOS_RES).forEach((g) => pintarElegidos(g, r));
+      pintarMedidor(r);
+      pintarBarra(r);
+      pintarPasos(r);
+      if (paso === ULTIMO_PASO) pintarResumen(r);
+      ultimo = null;
+    }
+
+    /* ---------- Navegación entre pasos ---------- */
+    function irA(i, foco = true) {
+      const dir = i >= paso ? 1 : -1;
+      paso = i;
+      visitado = Math.max(visitado, i);
+      secciones.forEach((s, j) => { s.hidden = j !== i; });
+      const s = secciones[i];
+      s.style.setProperty("--dir", dir);
+      s.classList.remove("entra");
+      void s.offsetWidth;
+      s.classList.add("entra");
+      atras.hidden = i === 0;
+      siguiente.innerHTML = i === ULTIMO_PASO ? btnHTML("Enviar reserva") : btnHTML("Siguiente");
+      mostrarError("");
+      repintar();
+      caja.scrollTop = 0;
+      if (foco) $(".res-paso-titulo", s).focus({ preventScroll: true });
+    }
+
+    function avanzar() {
+      const falta = faltaEnPaso(paso, calculo());
+      if (falta) return mostrarError(falta.msg, falta.campo);
+      irA(paso + 1);
+    }
+
+    atras.addEventListener("click", () => irA(paso - 1));
+    cuerpo.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-ir]");
+      if (b && !b.disabled) irA(Number(b.dataset.ir));
+    });
+    form.addEventListener("change", (e) => {
+      if (e.target.name === "noche") { mostrarError(""); repintar(); }
+    });
+    form.addEventListener("input", (e) => e.target.removeAttribute("aria-invalid"));
+
+    // − / + de lo elegido
     form.addEventListener("click", (e) => {
-      const b = e.target.closest(".qty-btn");
+      const b = e.target.closest(".res-elegido .qty-btn");
       if (!b) return;
-      const q = b.parentElement;
-      const out = $(".qty-n", q);
-      const n = Math.max(0, Math.min(MAX_UNIDADES, Number(out.textContent) + Number(b.dataset.paso)));
-      out.textContent = String(n);
-      q.classList.toggle("has", n > 0);
-      q.querySelector('[data-paso="-1"]').disabled = n === 0;
-      q.querySelector('[data-paso="1"]').disabled = n === MAX_UNIDADES;
+      const { grupo, nombre } = b.closest(".res-elegido").dataset;
+      cambiar(grupo, nombre, Number(b.dataset.paso));
+      // La lista se repinta: devuelve el foco al mismo botón (o al buscador si la línea desapareció)
+      const mismo = form.querySelector(`.res-elegido[data-grupo="${grupo}"][data-nombre="${CSS.escape(nombre)}"] .qty-btn[data-paso="${b.dataset.paso}"]`);
+      (mismo && !mismo.disabled ? mismo : buscadorDe(grupo)).focus({ preventScroll: true });
     });
 
+    // Cantidad escrita a mano. Se aplica mientras se escribe (vacío o 0 esperan a salir del campo)
+    const campoCantidad = (grupo, nombre) =>
+      form.querySelector(`.res-elegido[data-grupo="${grupo}"][data-nombre="${CSS.escape(nombre)}"] .qty-n`);
+    form.addEventListener("input", (e) => {
+      const campo = e.target.closest(".res-elegido .qty-n");
+      if (!campo) return;
+      const { grupo, nombre } = campo.closest(".res-elegido").dataset;
+      const limpio = campo.value.replace(/\D/g, "");
+      const pos = Math.min(campo.selectionStart ?? limpio.length, limpio.length);
+      if (!limpio || Number(limpio) === 0) { campo.value = limpio; return; }
+      fijar(grupo, nombre, Number(limpio));
+      // La lista se repinta: vuelve al mismo campo con el cursor donde estaba
+      const nuevo = campoCantidad(grupo, nombre);
+      if (nuevo) {
+        nuevo.focus({ preventScroll: true });
+        const p = Math.min(pos, nuevo.value.length);
+        nuevo.setSelectionRange(p, p);
+      }
+    });
+    form.addEventListener("change", (e) => {
+      const campo = e.target.closest(".res-elegido .qty-n");
+      if (!campo) return;
+      const { grupo, nombre } = campo.closest(".res-elegido").dataset;
+      if (campo.value === "") return repintar(); // vacío: vuelve a la cantidad que había
+      if (Number(campo.value) === 0) fijar(grupo, nombre, 0);
+    });
+    form.addEventListener("keydown", (e) => {
+      const campo = e.target.closest(".res-elegido .qty-n");
+      if (!campo) return;
+      const { grupo, nombre } = campo.closest(".res-elegido").dataset;
+      if (e.key === "Enter") {
+        e.preventDefault(); // no pasa de paso: solo confirma la cantidad
+        campo.blur();
+      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        cambiar(grupo, nombre, e.key === "ArrowUp" ? 1 : -1);
+        (campoCantidad(grupo, nombre) || buscadorDe(grupo)).focus({ preventScroll: true });
+      }
+    });
+
+    /* ---------- Buscadores con sugerencias ---------- */
+    form.querySelectorAll(".res-grupo[data-grupo]").forEach((bloque) => {
+      const grupo = bloque.dataset.grupo;
+      const input = $("[role=\"combobox\"]", bloque);
+      const lista = $(".res-sugerencias", bloque);
+      const atajos = Array.from(bloque.querySelectorAll(".res-atajo"));
+      let resultados = [];
+      let activo = -1;
+
+      const marcarActivo = (i) => {
+        activo = i;
+        Array.from(lista.children).forEach((li, j) => li.setAttribute("aria-selected", String(j === i)));
+        if (i >= 0 && lista.children[i]) {
+          input.setAttribute("aria-activedescendant", lista.children[i].id);
+          lista.children[i].scrollIntoView({ block: "nearest" });
+        } else input.removeAttribute("aria-activedescendant");
+      };
+
+      const marcarAtajo = () => {
+        const q = Reservas.normalizar(input.value);
+        atajos.forEach((a) => a.setAttribute("aria-pressed", String(Reservas.normalizar(a.dataset.atajo) === q)));
+      };
+
+      const cerrar = () => {
+        lista.hidden = true;
+        input.setAttribute("aria-expanded", "false");
+        marcarActivo(-1);
+      };
+
+      // Al abrir, sube el bloque (atajos + buscador) a lo alto de la caja: las sugerencias quedan a la vista debajo
+      const subirBuscador = () => {
+        const dy = bloque.getBoundingClientRect().top - caja.getBoundingClientRect().top - 16;
+        if (Math.abs(dy) > 4) caja.scrollTo({ top: caja.scrollTop + dy, behavior: reducedMotion ? "auto" : "smooth" });
+      };
+
+      const abrir = () => {
+        const estabaCerrada = lista.hidden;
+        marcarAtajo();
+        resultados = Reservas.buscar(RES[grupo] || [], input.value);
+        lista.innerHTML = resultados.length
+          ? resultados.map(({ item, alias }, i) => {
+            const n = cantidadDe(grupo, item.nombre);
+            return `
+            <li role="option" id="res-sug-${grupo}-${i}" class="res-sug" aria-selected="false">
+              <span class="res-sug-nombre">${esc(item.nombre)}${etiquetaPremium(item)}${n ? ` <span class="res-sug-n">×${n}</span>` : ""}</span>
+              ${alias ? `<span class="res-sug-alias">“${esc(alias)}” → en Botanic tenemos ${esc(item.nombre)}</span>` : ""}
+              <span class="res-sug-precio">${precioTexto(grupo, item)}</span>
+            </li>`;
+          }).join("")
+          : `<li class="res-sug-nada" role="presentation">No tenemos “${esc(input.value.trim())}”. Prueba con otra bebida o pídela en comentarios.</li>`;
+        lista.hidden = false;
+        input.setAttribute("aria-expanded", "true");
+        marcarActivo(resultados.length && input.value.trim() ? 0 : -1);
+        if (estabaCerrada) subirBuscador();
+      };
+
+      const elegir = (i) => {
+        const r = resultados[i];
+        if (!r) return;
+        if (cambiar(grupo, r.item.nombre, 1)) input.value = "";
+        marcarAtajo();
+        cerrar();
+        input.focus();
+      };
+
+      // Se abre al escribir, al tocar el campo o con ↓; no al recibir el foco (taparía los atajos)
+      input.addEventListener("input", abrir);
+      input.addEventListener("click", () => { if (lista.hidden) abrir(); });
+      input.addEventListener("blur", cerrar);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          if (lista.hidden) return abrir();
+          if (!resultados.length) return;
+          const salto = e.key === "ArrowDown" ? 1 : -1;
+          marcarActivo((activo + salto + resultados.length) % resultados.length);
+        } else if (e.key === "Enter") {
+          e.preventDefault(); // no pasa de paso
+          if (!lista.hidden && resultados.length) elegir(activo >= 0 ? activo : 0);
+        } else if (e.key === "Escape" && !lista.hidden) {
+          e.stopPropagation(); // cierra las sugerencias, no el formulario
+          cerrar();
+        }
+      });
+      // pointerdown sin perder el foco del campo: así el blur no cierra la lista antes del clic
+      lista.addEventListener("pointerdown", (e) => e.preventDefault());
+      lista.addEventListener("click", (e) => {
+        const li = e.target.closest(".res-sug");
+        if (li) elegir(Array.from(lista.children).indexOf(li));
+      });
+      // Atajos: Ron, Ginebra… (otra pulsación sobre el mismo lo quita)
+      atajos.forEach((a) => a.addEventListener("click", () => {
+        input.value = a.getAttribute("aria-pressed") === "true" ? "" : a.dataset.atajo;
+        input.focus();
+        abrir();
+      }));
+    });
+
+    /* ---------- Siguiente / enviar ---------- */
     form.addEventListener("submit", (e) => {
       e.preventDefault();
+      if (paso < ULTIMO_PASO) return avanzar();
+
+      const r = calculo();
+      const incompleto = primerIncompleto(r);
+      if (incompleto < ULTIMO_PASO) {
+        const falta = faltaEnPaso(incompleto, r);
+        irA(incompleto);
+        return mostrarError(falta.msg, falta.campo);
+      }
       const f = form.elements;
       const v = window.BotanicNombre.validar(f.nombre.value);
       if (!v.ok) return mostrarError(v.error, f.nombre);
@@ -1021,27 +1524,28 @@
       if (!/^\+?\d{9,15}$/.test(tel)) return mostrarError("Escribe un teléfono válido.", f.telefono);
       const personas = Number(f.personas.value);
       if (!Number.isInteger(personas) || personas < 1 || personas > 30) return mostrarError("Indica cuántas personas venís (1 a 30).", f.personas);
-      if (!f.noche.value) return mostrarError("No hay noches disponibles para reservar.", f.noche);
       mostrarError("");
 
-      const cantidades = (grupo) => Array.from(form.querySelectorAll(`.qty[data-grupo="${grupo}"]`))
-        .map((q) => ({ nombre: q.dataset.nombre, cantidad: Number($(".qty-n", q).textContent) }))
-        .filter((x) => x.cantidad > 0);
-
+      const de = (grupo) => r.lineas.filter((l) => l.grupo === grupo).map(({ nombre, cantidad, precio }) => ({ nombre, cantidad, precio }));
       const datos = {
         tipo: f.tipo.value,
-        fecha: f.noche.value,
+        fecha: nocheElegida(),
         nombre: v.nombre,
         telefono: tel,
         personas,
-        botellas: cantidades("botellas"),
-        refrescos: cantidades("refrescos"),
+        botellas: de("botellas"),
+        chupitos: de("chupitos"),
+        champan: de("champan"),
+        refrescos: de("refrescos"),
+        suplementos: r.suplementos,
+        total: r.total,
+        aConsultar: r.aConsultar,
         notas: f.notas.value.trim()
       };
       enviarReserva(datos).then(() => renderReservaHecha(datos));
     });
 
-    $("#res-modal-caja").scrollTop = 0;
+    irA(0, false);
   }
 
   /* Sin servidor todavía: aquí se conectará el guardado de la reserva */
@@ -1052,14 +1556,15 @@
   function renderReservaHecha(datos) {
     const t = RES.tipos[datos.tipo] || {};
     const lista = (items) => items.map((x) => `${x.cantidad} × ${esc(x.nombre)}`).join(", ");
+    const linea = (grupo) => (datos[grupo].length ? `<p><strong>${esc(GRUPOS_RES[grupo].titulo)}:</strong> ${lista(datos[grupo])}</p>` : "");
     const cuerpo = $("#res-modal-cuerpo");
     cuerpo.innerHTML = `
       <div class="list-done">
         <div class="tick" aria-hidden="true">✓</div>
         <h4 id="res-modal-titulo">¡Solicitud enviada!</h4>
         <p>${esc(t.nombre)} · ${esc(fechaLarga(fromKey(datos.fecha)))} · ${datos.personas} ${datos.personas === 1 ? "persona" : "personas"}</p>
-        ${datos.botellas.length ? `<p><strong>Botellas:</strong> ${lista(datos.botellas)}</p>` : ""}
-        ${datos.refrescos.length ? `<p><strong>Refrescos:</strong> ${lista(datos.refrescos)}</p>` : ""}
+        ${Object.keys(GRUPOS_RES).map(linea).join("")}
+        <p><strong>Total:</strong> ${euros(datos.total)}${datos.aConsultar ? " + champán a consultar" : ""}. Se paga en la puerta de la discoteca.</p>
         <p>Te escribiremos al ${esc(datos.telefono)} para confirmarla.</p>
         <button class="btn btn-ghost btn-sm" type="button">${btnHTML("Cerrar")}</button>
       </div>`;

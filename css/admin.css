@@ -79,14 +79,24 @@
 
 .rpp-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .rpp-links li {
-  display: grid; grid-template-columns: 9rem 1fr auto; align-items: center; gap: 12px;
+  display: grid; grid-template-columns: 9rem minmax(0, 1fr); align-items: center; gap: 8px 12px;
   padding: .7rem .9rem;
   border-radius: var(--radius-sm);
   background: rgba(5, 16, 13, .55);
   border: 1px solid var(--line);
 }
 .rpp-links li.inactivo { opacity: .5; }
+.rpp-links li > strong { grid-row: span 2; }
+/* Una fila por link: tipo (Lista / Reservados), link y botón de copiar */
+.rpp-link { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.rpp-link-tipo { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .rpp-links code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--leaf); font-size: .85rem; }
-@media (max-width: 600px) { .rpp-links li { grid-template-columns: 1fr auto; } .rpp-links code { grid-column: 1 / -1; grid-row: 2; } }
+@media (max-width: 600px) {
+  .rpp-links li { grid-template-columns: 1fr; }
+  .rpp-links li > strong { grid-row: auto; }
+  .rpp-link { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .rpp-link code { grid-column: 1; grid-row: 2; }
+  .rpp-link .btn { grid-column: 2; grid-row: 1 / span 2; }
+}
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

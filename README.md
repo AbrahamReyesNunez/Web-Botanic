@@ -43,10 +43,11 @@ test/                            Pruebas (node --test)
 ## Lista y RPPs
 
 - La lista pide solo **nombre y apellidos**. El campo **RPP** no se puede editar:
-  - Con el link de un RPP (`https://dominio/?rpp=CÓDIGO`) queda fijado en ese RPP, también si la persona navega por la web.
+  - Con el link de un RPP (`https://dominio/?rpp=CÓDIGO`) abre directamente la lista de la próxima noche y queda fijado en ese RPP, también si la persona navega por la web.
+  - Cada RPP tiene además un link de reservados (`https://dominio/?reserva=CÓDIGO`): abre la web en la sección de reservados y la reserva queda asignada a ese RPP. Cada link cuenta solo para lo suyo.
   - Sin link queda en **"Sin RPP"**, así nadie puede asignarse un RPP a mano.
 - **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, con un `codigo` nuevo de 8 letras minúsculas/números aleatorios y su `nombre`. Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
-- **Panel** (`/admin.html`, con la clave de `ADMIN_KEY`): inscritos por noche y por RPP con porcentajes, buscador, borrado de nombres colados, exportación a CSV y links de cada RPP para copiar.
+- **Panel** (`/admin.html`, con la clave de `ADMIN_KEY`): inscritos por noche y por RPP con porcentajes, buscador, borrado de nombres colados, exportación a CSV y los dos links de cada RPP (lista y reservados) para copiar.
 - La lista de un día se cierra a las 23:00 de ese día (`cierreListaHora` en `data/config.js`, hora de Madrid).
 
 ### Protección contra abusos

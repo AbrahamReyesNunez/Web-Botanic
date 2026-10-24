@@ -125,29 +125,44 @@
     }
   }
 
-  /* ---------- Links de RPP ---------- */
+  /* ---------- Links de RPP: uno para la lista y otro para reservados ---------- */
+  const TIPOS_LINK = [
+    { tipo: "Lista", param: "rpp" },
+    { tipo: "Reservados", param: "reserva" }
+  ];
+
+  function filaLink(tipo, url) {
+    const fila = document.createElement("div");
+    fila.className = "rpp-link";
+    const etiqueta = document.createElement("span");
+    etiqueta.className = "rpp-link-tipo";
+    etiqueta.textContent = tipo;
+    const link = document.createElement("code");
+    link.textContent = url;
+    const copiar = document.createElement("button");
+    copiar.className = "btn btn-ghost btn-sm";
+    copiar.type = "button";
+    copiar.setAttribute("aria-label", `Copiar link de ${tipo.toLowerCase()}`);
+    copiar.innerHTML = '<span class="btn-label">Copiar</span><span class="btn-arrow" aria-hidden="true">⧉</span>';
+    copiar.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+        copiar.querySelector(".btn-label").textContent = "¡Copiado!";
+        setTimeout(() => { copiar.querySelector(".btn-label").textContent = "Copiar"; }, 1600);
+      } catch (e) { window.prompt("Copia el link:", url); }
+    });
+    fila.append(etiqueta, link, copiar);
+    return fila;
+  }
+
   async function cargarRpps() {
     const j = await api("/api/admin/rpps");
-    const base = `${location.origin}/?rpp=`;
     $("#rpp-links").replaceChildren(...j.rpps.map((r) => {
       const li = document.createElement("li");
       if (!r.activo) li.className = "inactivo";
       const nombre = document.createElement("strong");
       nombre.textContent = r.nombre + (r.activo ? "" : " (inactivo)");
-      const link = document.createElement("code");
-      link.textContent = base + r.codigo;
-      const copiar = document.createElement("button");
-      copiar.className = "btn btn-ghost btn-sm";
-      copiar.type = "button";
-      copiar.innerHTML = '<span class="btn-label">Copiar</span><span class="btn-arrow" aria-hidden="true">⧉</span>';
-      copiar.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(base + r.codigo);
-          copiar.querySelector(".btn-label").textContent = "¡Copiado!";
-          setTimeout(() => { copiar.querySelector(".btn-label").textContent = "Copiar"; }, 1600);
-        } catch (e) { window.prompt("Copia el link:", base + r.codigo); }
-      });
-      li.append(nombre, link, copiar);
+      li.append(nombre, ...TIPOS_LINK.map((t) => filaLink(t.tipo, `${location.origin}/?${t.param}=${r.codigo}`)));
       return li;
     }));
   }

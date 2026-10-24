@@ -576,32 +576,42 @@
     return box;
   }
 
-  /* ---------------- RPP del link (?rpp=código) ---------------- */
+  /* ---------------- RPP de los links ----------------
+     Cada RPP tiene dos links con el mismo código y cada uno cuenta solo para lo suyo:
+     ?rpp=código     → lista
+     ?reserva=código → reservados (abre la web en la sección de reservados) */
   const RPP_KEY = "botanic_rpp";
-  let rppActual = null; // { codigo, nombre } validado por el servidor
+  const RPP_RESERVA_KEY = "botanic_rpp_reserva";
+  let rppActual = null;  // { codigo, nombre } de la lista, validado por el servidor
+  let rppReserva = null; // { codigo, nombre } de los reservados
 
-  /* Lee el RPP del link o, si no hay, el que se guardó en esta pestaña */
-  async function initRpp() {
-    const codigo = new URLSearchParams(location.search).get("rpp");
+  /* Lee el RPP del parámetro del link o, si no está, el que se guardó en esta pestaña */
+  async function rppDelLink(param, key) {
+    const codigo = new URLSearchParams(location.search).get(param);
     if (codigo === null) {
-      try { rppActual = JSON.parse(sessionStorage.getItem(RPP_KEY)); } catch (e) { rppActual = null; }
-    } else {
-      rppActual = null;
-      if (/^[a-z0-9]{4,32}$/.test(codigo)) {
-        try {
-          const r = await fetch(`/api/rpp/${codigo}`);
-          if (r.ok) { const j = await r.json(); rppActual = { codigo: j.codigo, nombre: j.nombre }; }
-        } catch (e) { /* sin servidor: queda sin RPP */ }
-      }
-      try {
-        if (rppActual) sessionStorage.setItem(RPP_KEY, JSON.stringify(rppActual));
-        else sessionStorage.removeItem(RPP_KEY);
-      } catch (e) { /* sin almacenamiento: vale solo para esta carga */ }
+      try { return JSON.parse(sessionStorage.getItem(key)); } catch (e) { return null; }
     }
-    document.querySelectorAll(".rpp-field input").forEach((i) => { i.value = textoRpp(); });
+    let rpp = null;
+    if (/^[a-z0-9]{4,32}$/.test(codigo)) {
+      try {
+        const r = await fetch(`/api/rpp/${codigo}`);
+        if (r.ok) { const j = await r.json(); rpp = { codigo: j.codigo, nombre: j.nombre }; }
+      } catch (e) { /* sin servidor: queda sin RPP */ }
+    }
+    try {
+      if (rpp) sessionStorage.setItem(key, JSON.stringify(rpp));
+      else sessionStorage.removeItem(key);
+    } catch (e) { /* sin almacenamiento: vale solo para esta carga */ }
+    return rpp;
   }
 
-  const textoRpp = () => (rppActual ? rppActual.nombre : "Sin RPP");
+  async function initRpp() {
+    [rppActual, rppReserva] = await Promise.all([rppDelLink("rpp", RPP_KEY), rppDelLink("reserva", RPP_RESERVA_KEY)]);
+    document.querySelectorAll(".rpp-field input").forEach((i) => { i.value = textoRpp(); });
+    document.querySelectorAll(".res-rpp-field input").forEach((i) => { i.value = textoRpp(rppReserva); });
+  }
+
+  const textoRpp = (rpp = rppActual) => (rpp ? rpp.nombre : "Sin RPP");
 
   /* Token firmado por el servidor; se pide al mostrar el formulario */
   async function pedirToken() {
@@ -1041,7 +1051,7 @@
           <h4 class="res-paso-titulo" id="res-p4" tabindex="-1">Tus datos</h4>
           <p class="res-paso-sub">Te confirmaremos la reserva por WhatsApp o llamada.</p>
           <div class="form-grid res-form-grid">
-            <div class="field res-campo-ancho">
+            <div class="field">
               <label for="res-nombre">Nombre y apellidos</label>
               <input id="res-nombre" name="nombre" autocomplete="name" autocapitalize="words" spellcheck="false" required maxlength="${window.BotanicNombre.MAX}">
             </div>
@@ -1052,6 +1062,13 @@
             <div class="field">
               <label for="res-personas">Personas</label>
               <input id="res-personas" name="personas" type="number" inputmode="numeric" min="1" max="30" value="4" required>
+            </div>
+            <div class="field res-rpp-field">
+              <label for="res-rpp">RPP</label>
+              <div class="rpp-locked">
+                <input id="res-rpp" value="${esc(textoRpp(rppReserva))}" readonly tabindex="-1" aria-readonly="true">
+                ${ICONO_CANDADO}
+              </div>
             </div>
             <div class="field res-campo-ancho">
               <label for="res-notas">Comentarios (opcional)</label>
@@ -1533,6 +1550,7 @@
         nombre: v.nombre,
         telefono: tel,
         personas,
+        rpp: rppReserva ? rppReserva.codigo : null,
         botellas: de("botellas"),
         chupitos: de("chupitos"),
         champan: de("champan"),
@@ -1631,5 +1649,28 @@
     // Enlace directo a un día: index.html#dia=2026-10-17
     const m = location.hash.match(/^#dia=(\d{4}-\d{2}-\d{2})$/);
     if (m && isOpen(fromKey(m[1]))) abrirDia(fromKey(m[1]), true);
+
+    // Links de RPP: llevan directos a lo suyo (salvo que el link ya traiga un #ancla).
+    //   ?reserva=código → sección de reservados
+    //   ?rpp=código     → formulario de la lista de la próxima noche abierta (o la agenda si no hay ninguna)
+    // Se espera a "load" para que las imágenes ya hayan ocupado su sitio y el salto no se desvíe
+    const params = new URLSearchParams(location.search);
+    if (!location.hash && (params.has("reserva") || params.has("rpp"))) {
+      window.addEventListener("load", () => {
+        const comportamiento = reducedMotion ? "auto" : "smooth";
+        const [proxima] = proximasNoches(1, true);
+        if (params.has("reserva")) return $("#reservados").scrollIntoView({ behavior: comportamiento });
+        if (!proxima) return $("#agenda").scrollIntoView({ behavior: comportamiento });
+        abrirDia(proxima, false);
+        // Se ve el panel entero si el formulario cabe en pantalla; si no (móvil, con el cartel encima), directo al formulario
+        const panel = $(".day-panel");
+        const lista = $(".day-panel .list-box");
+        if (!panel || !lista) return;
+        const p = panel.getBoundingClientRect();
+        const l = lista.getBoundingClientRect();
+        const desde = l.bottom - p.top + 80 <= window.innerHeight ? p.top : l.top;
+        window.scrollTo({ top: desde + window.scrollY - 80, behavior: comportamiento });
+      }, { once: true });
+    }
   });
 })();

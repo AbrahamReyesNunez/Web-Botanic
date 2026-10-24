@@ -129,16 +129,25 @@ function crearServidor(opciones = {}) {
     });
   }
 
+  /* Página 404 del sitio (las rutas /api/ siguen respondiendo JSON) */
+  function noEncontrado(req, res) {
+    fs.readFile(path.join(RAIZ, "404.html"), (err, html) => {
+      if (err) return enviar(res, 404, { ok: false, error: "No encontrado." });
+      res.writeHead(404, { ...CABECERAS_SEGURIDAD, "Content-Type": MIME[".html"], "Content-Length": html.length, "Cache-Control": "no-cache" });
+      res.end(req.method === "HEAD" ? undefined : html);
+    });
+  }
+
   function servirArchivo(req, res, ruta) {
     let rel;
     try { rel = decodeURIComponent(ruta); } catch (e) { rel = null; }
     if (rel === "/") rel = "/index.html";
     const archivo = rel && path.resolve(RAIZ, "." + path.posix.normalize(rel));
     if (!rel || rel.includes("\0") || PRIVADO.test(rel) || !archivo.startsWith(RAIZ + path.sep)) {
-      return enviar(res, 404, { ok: false, error: "No encontrado." });
+      return noEncontrado(req, res);
     }
     fs.stat(archivo, (err, st) => {
-      if (err || !st.isFile()) return enviar(res, 404, { ok: false, error: "No encontrado." });
+      if (err || !st.isFile()) return noEncontrado(req, res);
       res.writeHead(200, {
         ...CABECERAS_SEGURIDAD,
         "Content-Type": MIME[path.extname(archivo).toLowerCase()] || "application/octet-stream",

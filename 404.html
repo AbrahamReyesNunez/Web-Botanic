@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Página no encontrada · Botanic Chipiona</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#06120f">
+  <link rel="icon" href="/img/brand/botanic.jpg">
+
+  <!-- Rutas absolutas: esta página se sirve en cualquier URL que no exista -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css?v=9">
+  <style>
+    .perdido {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      min-height: 100vh;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      padding: 96px var(--gutter) 64px;
+      text-align: center;
+    }
+    .perdido::after {
+      content: ""; position: absolute; inset: 0; z-index: -1;
+      background:
+        radial-gradient(ellipse at center, rgba(5,16,13,.35) 0%, rgba(5,16,13,.75) 60%, rgba(5,16,13,.95) 100%);
+    }
+    .perdido .hero-back { top: 0; bottom: 0; filter: saturate(1.1) brightness(.55); }
+    .perdido .hero-front { opacity: .45; }
+
+    .perdido-brand { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); }
+
+    /* El "4Ø4" es un rótulo de neón con un tubo fundido: el segundo 4 parpadea y se apaga */
+    .codigo-404 {
+      margin: 0 0 .4rem;
+      font-size: clamp(5rem, 30vw, 13rem);
+      letter-spacing: .08em;
+    }
+    .codigo-404 .fundido {
+      display: inline-block;
+      animation: fundido 4.5s steps(1, end) 1.2s infinite;
+    }
+    @keyframes fundido {
+      0%, 8%, 12%, 40%, 44%, 46%, 100% { opacity: 1; text-shadow: var(--glow); }
+      10%, 42%, 45% { opacity: .18; text-shadow: none; }
+      70%, 74% { opacity: .35; text-shadow: none; }
+    }
+
+    .perdido h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(1.25rem, 5vw, 2.2rem);
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .perdido-texto { margin: 1rem auto 0; max-width: 46ch; color: var(--muted); font-size: 1.05rem; }
+  </style>
+</head>
+<body>
+  <main class="perdido">
+    <div class="hero-layer hero-back" aria-hidden="true"></div>
+    <div class="beams" aria-hidden="true">
+      <span class="beam beam-1"></span>
+      <span class="beam beam-2"></span>
+    </div>
+    <div class="hero-layer hero-front" aria-hidden="true"></div>
+
+    <a href="/" class="brand perdido-brand" aria-label="Botanic, ir al inicio">B<span class="o-slash">Ø</span>TANIC</a>
+
+    <div>
+      <p class="eyebrow">Error 404</p>
+      <p class="neon-title codigo-404" aria-hidden="true">4<span class="o-slash">Ø</span><span class="fundido">4</span></p>
+      <h1>Te has perdido en la selva</h1>
+      <p class="perdido-texto">Esta página no existe o ya no está. La fiesta sigue en la pista: vuelve al inicio o mira qué noches abrimos.</p>
+
+      <div class="hero-actions">
+        <a href="/" class="btn btn-neon"><span class="btn-label">Volver al inicio</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+        <a href="/#agenda" class="btn btn-ghost"><span class="btn-label">Ver la agenda</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

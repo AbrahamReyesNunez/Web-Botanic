@@ -192,5 +192,10 @@ test("archivos privados y rutas con ../ no se sirven", async () => {
     assert.equal(index.status, 200);
     assert.match(index.headers.get("content-security-policy"), /frame-ancestors 'none'/);
     assert.equal((await fetch(`${s.base}/js/compartido/nombre.js`)).status, 200);
+    const perdida = await fetch(`${s.base}/no/existe`);
+    assert.equal(perdida.status, 404);
+    assert.match(perdida.headers.get("content-type"), /text\/html/);
+    assert.match(await perdida.text(), /Te has perdido/);
+    assert.match((await fetch(`${s.base}/api/no-existe`)).headers.get("content-type"), /application\/json/);
   } finally { await s.cerrar(); }
 });

@@ -837,9 +837,54 @@
      ========================================================= */
   const RES = window.BOTANIC_RESERVADOS || { tipos: {}, precios: {}, botellas: [], chupitos: [], champan: [], refrescos: [] };
   const Reservas = window.BotanicReservas; // precios y buscador (js/compartido/reservas.js)
-  const MAX_UNIDADES = 10;
+  const MAX_UNIDADES = Reservas.MAX_POR_LINEA;
   let resTipo = null;      // tipo mostrado en el panel
   let resLastFocus = null;
+
+  /* ---------------- Mesas completas (las dice el servidor) ----------------
+     Un tipo está completo una noche cuando todas sus mesas están confirmadas.
+     Sin respuesta del servidor se deja reservar: el servidor vuelve a comprobarlo al enviar. */
+  let resDispo = { sinMesas: [], completas: {} };
+  const resCompleto = (fecha, tipo) =>
+    resDispo.sinMesas.includes(tipo) || (resDispo.completas[fecha] || []).includes(tipo);
+  const resNoches = () => proximasNoches(8, true);
+  const resTipoLleno = (tipo) => resNoches().every((d) => resCompleto(keyOf(d), tipo));
+
+  async function cargarDisponibilidad() {
+    try {
+      const r = await fetch("/api/reservas/disponibilidad", { cache: "no-store" });
+      const j = r.ok ? await r.json() : null;
+      if (j && j.ok) {
+        const lista = (x) => (Array.isArray(x) ? x.filter((t) => typeof t === "string") : []);
+        const completas = {};
+        for (const [fecha, tipos] of Object.entries(j.completas || {})) {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) completas[fecha] = lista(tipos);
+        }
+        resDispo = { sinMesas: lista(j.sinMesas), completas };
+      }
+    } catch (e) { /* sin servidor: se deja reservar */ }
+    aplicarDisponibilidad();
+  }
+
+  /* Si un tipo está completo todas las próximas noches, su botón cambia y no deja abrir el formulario */
+  function aplicarDisponibilidad() {
+    Object.keys(RES.tipos).forEach((tipo) => {
+      const lleno = resTipoLleno(tipo);
+      const card = $(`.res-card-${tipo}`);
+      const opcion = $(`.res-opcion[data-tipo="${tipo}"] .res-opcion-sub`);
+      if (card) {
+        const btn = $(".res-reservar", card);
+        btn.disabled = lleno;
+        $(".btn-label", btn).textContent = lleno ? "Completo" : `Reservar ${(RES.tipos[tipo].nombre || "").toLowerCase()}`;
+        $(".res-completo", card).hidden = !lleno;
+      }
+      if (opcion) {
+        opcion.dataset.original ??= opcion.textContent;
+        opcion.textContent = lleno ? "Completo las próximas noches" : opcion.dataset.original;
+        opcion.closest(".res-opcion").classList.toggle("completa", lleno);
+      }
+    });
+  }
 
   function initReservados() {
     const panel = $("#res-panel");
@@ -890,6 +935,8 @@
     $("#res-modal-close").addEventListener("click", cerrarReserva);
     modal.addEventListener("click", (e) => { if (e.target === modal) cerrarReserva(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) cerrarReserva(); });
+
+    cargarDisponibilidad();
   }
 
   function buildResPanel(tipo) {
@@ -908,9 +955,12 @@
       <h3 class="res-card-titulo">${esc(t.nombre)}</h3>
       <p class="res-card-desc">${esc(t.descripcion)}</p>
       <ul class="res-incluye">${(t.incluye || []).map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`);
+    const completo = el("p", { class: "res-completo", role: "status", hidden: true },
+      `Todas las mesas de este tipo están reservadas para las próximas noches. <a href="https://wa.me/${esc(CFG.whatsapp)}" target="_blank" rel="noopener">Escríbenos por WhatsApp</a> por si se libera alguna.`);
+    cuerpo.appendChild(completo);
     const acciones = el("div", { class: "form-actions" });
-    const reservar = el("button", { class: "btn btn-neon", type: "button" }, btnHTML(`Reservar ${t.nombre.toLowerCase()}`));
-    reservar.addEventListener("click", () => abrirReserva(tipo));
+    const reservar = el("button", { class: "btn btn-neon res-reservar", type: "button" }, btnHTML(`Reservar ${t.nombre.toLowerCase()}`));
+    reservar.addEventListener("click", () => { if (!resTipoLleno(tipo)) abrirReserva(tipo); });
     acciones.appendChild(reservar);
     cuerpo.appendChild(acciones);
     // Cascada: cada bloque entra un poco después del anterior
@@ -994,13 +1044,14 @@
     const tarjetasNoche = noches.map((d) => {
       const k = keyOf(d);
       const ev = (EVENTOS[k] || {}).titulo;
+      const lleno = resCompleto(k, tipo);
       return `
-        <label class="res-noche">
-          <input type="radio" name="noche" value="${k}">
+        <label class="res-noche${lleno ? " completa" : ""}">
+          <input type="radio" name="noche" value="${k}"${lleno ? " disabled" : ""}>
           <span class="res-noche-dia">${DIAS_CORTOS[d.getDay()]}</span>
           <span class="res-noche-num">${d.getDate()}</span>
           <span class="res-noche-mes">${MESES[d.getMonth()].slice(0, 3)}</span>
-          <span class="res-noche-precio">desde ${euros(Reservas.precioDe(RES, "botellas", {}, d.getDay()))}</span>
+          <span class="res-noche-precio">${lleno ? "Completo" : `desde ${euros(Reservas.precioDe(RES, "botellas", {}, d.getDay()))}`}</span>
           ${ev ? `<span class="res-noche-evento">${esc(ev)}</span>` : ""}
         </label>`;
     }).join("");
@@ -1063,7 +1114,8 @@
             </div>
             <div class="field">
               <label for="res-personas">Personas</label>
-              <input id="res-personas" name="personas" type="number" inputmode="numeric" min="1" max="30" value="4" required>
+              <input id="res-personas" name="personas" type="number" inputmode="numeric" min="1" max="30" value="4" required aria-describedby="res-personas-nota">
+              <p class="res-campo-nota" id="res-personas-nota"></p>
             </div>
             <div class="field res-rpp-field">
               <label for="res-rpp">RPP</label>
@@ -1075,6 +1127,9 @@
             <div class="field res-campo-ancho">
               <label for="res-notas">Comentarios (opcional)</label>
               <textarea id="res-notas" name="notas" rows="2" maxlength="500" placeholder="Cumpleaños, hora de llegada, alguna petición…"></textarea>
+            </div>
+            <div class="hp" aria-hidden="true">
+              <label>No rellenar <input name="web" tabindex="-1" autocomplete="off"></label>
             </div>
           </div>
           <section class="res-carrito" aria-labelledby="res-carrito-titulo">
@@ -1136,7 +1191,7 @@
     /* Qué le falta a un paso para poder seguir ("" si está completo) y dónde mandar el foco */
     function faltaEnPaso(i, r) {
       if (i === 0 && !nocheElegida()) {
-        return { msg: "Elige la noche que venís.", campo: form.querySelector('input[name="noche"]') };
+        return { msg: "Elige la noche que venís.", campo: form.querySelector('input[name="noche"]:not(:disabled)') };
       }
       if (i === 1 && r.botellas < r.minBotellas) {
         const faltan = r.minBotellas - r.botellas;
@@ -1330,13 +1385,23 @@
         </div>`;
     }
 
+    /* Hasta 5 personas por botella: el campo no deja subir de ahí y lo explica */
+    function pintarPersonas(r) {
+      const campo = form.elements.personas;
+      const max = Math.min(30, r.personasMax || 30);
+      campo.max = String(max);
+      $("#res-personas-nota", form).textContent = r.personasMax
+        ? `Hasta ${max} con ${plural(r.botellas, "botella", "botellas")}.`
+        : "";
+    }
+
     function repintar() {
       const r = calculo();
       Object.keys(GRUPOS_RES).forEach((g) => pintarElegidos(g, r));
       pintarMedidor(r);
       pintarBarra(r);
       pintarPasos(r);
-      if (paso === ULTIMO_PASO) pintarResumen(r);
+      if (paso === ULTIMO_PASO) { pintarResumen(r); pintarPersonas(r); }
       ultimo = null;
     }
 
@@ -1525,9 +1590,25 @@
     });
 
     /* ---------- Siguiente / enviar ---------- */
-    form.addEventListener("submit", (e) => {
+    // Código de seguridad del formulario (el mismo mecanismo que la lista)
+    let token = pedirToken().catch(() => null);
+    let enviando = false;
+
+    /* La noche se ha llenado mientras elegía: se bloquea su tarjeta */
+    function marcarNocheCompleta(fecha) {
+      const input = form.querySelector(`input[name="noche"][value="${fecha}"]`);
+      if (!input) return;
+      input.checked = false;
+      input.disabled = true;
+      const tarjeta = input.closest(".res-noche");
+      tarjeta.classList.add("completa");
+      $(".res-noche-precio", tarjeta).textContent = "Completo";
+    }
+
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (paso < ULTIMO_PASO) return avanzar();
+      if (enviando) return;
 
       const r = calculo();
       const incompleto = primerIncompleto(r);
@@ -1539,53 +1620,94 @@
       const f = form.elements;
       const v = window.BotanicNombre.validar(f.nombre.value);
       if (!v.ok) return mostrarError(v.error, f.nombre);
-      const tel = f.telefono.value.replace(/[\s.-]/g, "");
-      if (!/^\+?\d{9,15}$/.test(tel)) return mostrarError("Escribe un teléfono válido.", f.telefono);
+      const telefono = Reservas.normalizarTelefono(f.telefono.value);
+      if (!telefono) return mostrarError("Escribe un teléfono válido, por ejemplo 600 123 123.", f.telefono);
       const personas = Number(f.personas.value);
       if (!Number.isInteger(personas) || personas < 1 || personas > 30) return mostrarError("Indica cuántas personas venís (1 a 30).", f.personas);
+      if (r.personasMax && personas > r.personasMax) {
+        return mostrarError(`Con ${plural(r.botellas, "botella", "botellas")} podéis venir hasta ${r.personasMax} personas: añade otra botella o indica menos personas.`, f.personas);
+      }
       mostrarError("");
 
-      const de = (grupo) => r.lineas.filter((l) => l.grupo === grupo).map(({ nombre, cantidad, precio }) => ({ nombre, cantidad, precio }));
-      const datos = {
-        tipo: f.tipo.value,
+      // Solo se manda lo elegido: el precio lo calcula el servidor
+      const pedido = {
+        tipo,
         fecha: nocheElegida(),
         nombre: v.nombre,
-        telefono: tel,
+        telefono,
         personas,
         rpp: rppReserva ? rppReserva.codigo : null,
-        botellas: de("botellas"),
-        chupitos: de("chupitos"),
-        champan: de("champan"),
-        refrescos: de("refrescos"),
-        suplementos: r.suplementos,
-        total: r.total,
-        aConsultar: r.aConsultar,
-        notas: f.notas.value.trim()
+        notas: f.notas.value.trim(),
+        carrito: listaCarrito(),
+        web: f.web.value
       };
-      enviarReserva(datos).then(() => renderReservaHecha(datos));
+
+      enviando = true;
+      siguiente.disabled = true;
+      $(".btn-label", siguiente).textContent = "Enviando…";
+      const reactivar = (msg, campo) => {
+        enviando = false;
+        siguiente.disabled = false;
+        siguiente.innerHTML = btnHTML("Enviar reserva");
+        mostrarError(msg, campo);
+      };
+
+      try {
+        let tk = await token;
+        if (!tk || Date.now() - tk.pedido > 100 * 60_000) tk = await (token = pedirToken());
+        // El servidor no acepta tokens de menos de 3 s (bots): si hace falta, se espera
+        const espera = 3200 - (Date.now() - tk.pedido);
+        if (espera > 0) await new Promise((res) => setTimeout(res, espera));
+
+        const resp = await fetch("/api/reservas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...pedido, token: tk.valor })
+        });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok || !j.ok) {
+          if (resp.status === 400 && /caducado/.test(j.error || "")) token = pedirToken().catch(() => null);
+          if (j.motivo === "completo") {
+            (resDispo.completas[pedido.fecha] ||= []).push(tipo);
+            marcarNocheCompleta(pedido.fecha);
+            aplicarDisponibilidad();
+            reactivar("");
+            irA(0);
+            return mostrarError(j.error);
+          }
+          return reactivar(j.error || "No se ha podido enviar la reserva.", j.motivo === "duplicado" ? f.telefono : undefined);
+        }
+        renderReservaHecha({
+          tipo, fecha: pedido.fecha, personas, telefono: j.telefono || telefono, referencia: j.referencia,
+          total: j.total ?? r.total, aConsultar: r.aConsultar, lineas: r.lineas
+        });
+      } catch (ex) {
+        reactivar("No se ha podido conectar. Revisa tu conexión e inténtalo de nuevo.");
+      }
     });
 
     irA(0, false);
   }
 
-  /* Sin servidor todavía: aquí se conectará el guardado de la reserva */
-  function enviarReserva(datos) {
-    return Promise.resolve(datos);
-  }
+  /* +34600123123 → +34 600 123 123 */
+  const telefonoLegible = (t) => (/^\+34\d{9}$/.test(t) ? `+34 ${t.slice(3, 6)} ${t.slice(6, 9)} ${t.slice(9)}` : t);
 
-  function renderReservaHecha(datos) {
-    const t = RES.tipos[datos.tipo] || {};
-    const lista = (items) => items.map((x) => `${x.cantidad} × ${esc(x.nombre)}`).join(", ");
-    const linea = (grupo) => (datos[grupo].length ? `<p><strong>${esc(GRUPOS_RES[grupo].titulo)}:</strong> ${lista(datos[grupo])}</p>` : "");
+  function renderReservaHecha(h) {
+    const t = RES.tipos[h.tipo] || {};
+    const linea = (grupo) => {
+      const ls = h.lineas.filter((l) => l.grupo === grupo);
+      return ls.length ? `<p><strong>${esc(GRUPOS_RES[grupo].titulo)}:</strong> ${ls.map((x) => `${x.cantidad} × ${esc(x.nombre)}`).join(", ")}</p>` : "";
+    };
     const cuerpo = $("#res-modal-cuerpo");
     cuerpo.innerHTML = `
       <div class="list-done">
         <div class="tick" aria-hidden="true">✓</div>
-        <h4 id="res-modal-titulo">¡Solicitud enviada!</h4>
-        <p>${esc(t.nombre)} · ${esc(fechaLarga(fromKey(datos.fecha)))} · ${datos.personas} ${datos.personas === 1 ? "persona" : "personas"}</p>
+        <h4 id="res-modal-titulo">¡Petición enviada!</h4>
+        <p class="res-referencia">Referencia <strong>${esc(h.referencia)}</strong></p>
+        <p>${esc(t.nombre)} · ${esc(fechaLarga(fromKey(h.fecha)))} · ${plural(h.personas, "persona", "personas")}</p>
         ${Object.keys(GRUPOS_RES).map(linea).join("")}
-        <p><strong>Total:</strong> ${euros(datos.total)}${datos.aConsultar ? " + champán a consultar" : ""}. Se paga en la puerta de la discoteca.</p>
-        <p>Te escribiremos al ${esc(datos.telefono)} para confirmarla.</p>
+        <p><strong>Total:</strong> ${euros(h.total)}${h.aConsultar ? " + champán a consultar" : ""}. Se paga en la puerta de la discoteca.</p>
+        <p>Aún no es firme: te escribiremos por WhatsApp al <strong>${esc(telefonoLegible(h.telefono))}</strong> para confirmarla.</p>
         <button class="btn btn-ghost btn-sm" type="button">${btnHTML("Cerrar")}</button>
       </div>`;
     $("button", cuerpo).addEventListener("click", cerrarReserva);

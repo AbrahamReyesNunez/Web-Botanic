@@ -13,6 +13,9 @@
    - suplemento     → se suma una sola vez si hay al menos una
      (el Power King: 5 € tanto si es 1 lata como si son 10).
    - Champán con precio: null → sale "a consultar" y no suma.
+   El servidor usa este mismo archivo para recalcular cada reserva:
+   el precio que manda el navegador no se tiene en cuenta.
+   El número de mesas de cada tipo (aforo) está en Supabase, tabla tipos_mesa.
    ========================================================= */
 window.BOTANIC_RESERVADOS = {
   tipos: {
@@ -46,7 +49,8 @@ window.BOTANIC_RESERVADOS = {
     botella: { 3: 50, 4: 60, 5: 70, 6: 80 },
     premium: 20,              // se suma al precio de la botella ese día
     chupito: 50,              // botella de chupito, todos los días
-    refrescosPorBotella: 10   // incluidos con cada botella (no con chupitos ni champán)
+    refrescosPorBotella: 10,  // incluidos con cada botella (no con chupitos ni champán)
+    personasPorBotella: 5     // máximo de personas por cada botella de la mesa
   },
 
   botellas: [

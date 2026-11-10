@@ -17,9 +17,12 @@ const { crearAlmacen } = require("./almacen.js");
 const { crearAlmacenSupabase } = require("./almacen-supabase.js");
 const { crearLista } = require("./lista.js");
 const { crearAdmin } = require("./admin.js");
+const { crearTokens } = require("./formulario.js");
+const { crearReservas } = require("./reservas.js");
 
 const RAIZ = path.resolve(__dirname, "..");
 const MAX_CUERPO = 1024;
+const MAX_CUERPO_RESERVA = 8 * 1024; // pedido de hasta 40 líneas y comentario de 500 caracteres
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -31,7 +34,7 @@ const MIME = {
 };
 
 /* Rutas que nunca se sirven como archivos */
-const PRIVADO = /^\/(server|test|node_modules|supabase|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md|actualizar-galeria\.ps1)$|(^|\/)\./;
+const PRIVADO = /^\/(server|test|node_modules|supabase|documentacion|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md|actualizar-galeria\.ps1)$|(^|\/)\./;
 
 const CABECERAS_SEGURIDAD = {
   "Content-Security-Policy": [
@@ -60,12 +63,13 @@ function ahoraMadrid() {
   return new Date(+partes.year, +partes.month - 1, +partes.day, +partes.hour, +partes.minute, +partes.second);
 }
 
-/* data/config.js es un script de navegador: se ejecuta con un window falso */
-function leerConfig() {
+/* data/config.js y data/reservados.js son scripts de navegador: se ejecutan con un window falso */
+function leerDatosWeb(archivo, variable) {
   const ctx = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(RAIZ, "data", "config.js"), "utf8"), ctx);
-  return ctx.window.BOTANIC_CONFIG;
+  vm.runInNewContext(fs.readFileSync(path.join(RAIZ, "data", archivo), "utf8"), ctx);
+  return ctx.window[variable];
 }
+const leerConfig = () => leerDatosWeb("config.js", "BOTANIC_CONFIG");
 
 /* Variables de entorno desde .env (KEY=VALUE por línea), sin pisar las existentes */
 function cargarEnv() {
@@ -83,11 +87,15 @@ function crearServidor(opciones = {}) {
   const almacen = opciones.supabase
     ? crearAlmacenSupabase(opciones.supabase)
     : crearAlmacen(opciones.datos || path.join(RAIZ, "data", "db"));
-  const lista = crearLista({ almacen, cal, cfg, secreto: opciones.secreto || crypto.randomBytes(32), ...opciones.lista });
+  const tokens = crearTokens({ secreto: opciones.secreto || crypto.randomBytes(32), ...opciones.tokens });
+  const lista = crearLista({ almacen, cal, cfg, tokens });
+  const reservas = crearReservas({ almacen, cal, cat: leerDatosWeb("reservados.js", "BOTANIC_RESERVADOS"), tokens });
   const admin = crearAdmin({ almacen, cal, claveAdmin: opciones.claveAdmin });
   const trustProxy = !!opciones.trustProxy;
 
-  const ipDe = (req) => (trustProxy && String(req.headers["x-forwarded-for"] || "").split(",")[0].trim()) || req.socket.remoteAddress || "?";
+  // Detrás de un proxy, la IP real es la ÚLTIMA de X-Forwarded-For: la añade el proxy.
+  // Las anteriores las puede escribir el propio visitante para saltarse los límites por IP.
+  const ipDe = (req) => (trustProxy && String(req.headers["x-forwarded-for"] || "").split(",").pop().trim()) || req.socket.remoteAddress || "?";
   const esHttps = (req) => req.socket.encrypted || (trustProxy && req.headers["x-forwarded-proto"] === "https");
 
   function enviar(res, status, cuerpo, cabeceras = {}) {
@@ -97,7 +105,7 @@ function crearServidor(opciones = {}) {
   const responder = (res, r) => enviar(res, r.status, r.cuerpo, r.cabeceras);
 
   /* Lee un cuerpo JSON pequeño. Devuelve null y responde si algo falla. */
-  function leerJSON(req, res) {
+  function leerJSON(req, res, max = MAX_CUERPO) {
     return new Promise((resolve) => {
       if (!/^application\/json\b/i.test(req.headers["content-type"] || "")) {
         enviar(res, 415, { ok: false, error: "Se esperaba JSON." });
@@ -109,7 +117,7 @@ function crearServidor(opciones = {}) {
       req.on("data", (c) => {
         if (cortado) return;
         tam += c.length;
-        if (tam > MAX_CUERPO) {
+        if (tam > max) {
           cortado = true;
           enviar(res, 413, { ok: false, error: "Petición demasiado grande." });
           req.destroy();
@@ -162,7 +170,7 @@ function crearServidor(opciones = {}) {
   async function api(req, res, ruta, url) {
     const m = req.method;
 
-    if (m === "GET" && ruta === "/api/form-token") return enviar(res, 200, { ok: true, token: lista.crearToken() });
+    if (m === "GET" && ruta === "/api/form-token") return enviar(res, 200, { ok: true, token: tokens.crear() });
 
     const rppMatch = ruta.match(/^\/api\/rpp\/([a-z0-9]{4,32})$/);
     if (m === "GET" && rppMatch) {
@@ -174,6 +182,14 @@ function crearServidor(opciones = {}) {
       const datos = await leerJSON(req, res);
       if (datos === null) return;
       return responder(res, await lista.inscribir(datos, ipDe(req)));
+    }
+
+    if (m === "GET" && ruta === "/api/reservas/disponibilidad") return responder(res, await reservas.disponibilidad());
+
+    if (m === "POST" && ruta === "/api/reservas") {
+      const datos = await leerJSON(req, res, MAX_CUERPO_RESERVA);
+      if (datos === null) return;
+      return responder(res, await reservas.crear(datos, ipDe(req)));
     }
 
     if (m === "POST" && ruta === "/api/admin/login") {
@@ -220,7 +236,7 @@ function crearServidor(opciones = {}) {
     }
   });
 
-  servidor.on("close", () => { lista.cerrar(); admin.cerrar(); });
+  servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); });
   servidor.almacen = almacen;
   return servidor;
 }

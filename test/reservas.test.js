@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { buscar, precioDe, calcular } = require("../js/compartido/reservas.js");
+const { buscar, precioDe, calcular, normalizarTelefono } = require("../js/compartido/reservas.js");
 
 // El catálogo real, tal y como lo carga la web
 const ctx = { window: {} };
@@ -78,6 +78,33 @@ test("hay que elegir todos los refrescos incluidos", () => {
   assert.match(r.errores[0], /faltan 7 refrescos/);
   pocos[1].cantidad = 19;
   assert.match(calcular(CAT, pocos, SAB, "vip").errores[0], /falta 1 refresco:/);
+});
+
+test("hasta 5 personas por botella", () => {
+  const r = (personas, botellas = 1) => calcular(CAT, conRefrescos(botellas), SAB, "pista", { personas }).errores;
+  assert.deepEqual(r(5), []);
+  assert.match(r(6)[0], /hasta 5 personas/);
+  assert.deepEqual(r(10, 2), []);
+  assert.deepEqual(calcular(CAT, conRefrescos(1), SAB, "pista").errores, [], "sin personas no se comprueba");
+});
+
+test("teléfono: formato internacional, +34 por defecto", () => {
+  const casos = {
+    "600 123 123": "+34600123123",
+    "600-12-31-23": "+34600123123",
+    "(956) 37 00 00": "+34956370000",
+    "+34 600123123": "+34600123123",
+    "0034600123123": "+34600123123",
+    "+44 7911 123456": "+447911123456",
+    "600123": null,
+    "500123123": null,
+    "+0600123123": null,
+    "60012312a": null,
+    "": null,
+    "+34600123123<script>": null
+  };
+  for (const [entrada, salida] of Object.entries(casos)) assert.equal(normalizarTelefono(entrada), salida, entrada);
+  assert.equal(normalizarTelefono(undefined), null);
 });
 
 test("buscador: sugiere mientras se escribe y traduce otras marcas", () => {

@@ -1,12 +1,24 @@
 -- =========================================================
--- BASE DE DATOS DE LA LISTA DE BOTANIC (Supabase / PostgreSQL)
--- Pégalo entero en Supabase → SQL Editor → New query → Run.
--- Se puede volver a ejecutar sin perder datos.
+-- 001 · LISTA: RPPs E INSCRIPCIONES (Supabase / PostgreSQL)
+-- Es el antiguo supabase/schema.sql más la tabla "migraciones".
+-- Se puede ejecutar sobre una base de datos que ya lo tenga: no pierde datos.
+--
+-- Cómo se aplican las migraciones: Supabase → SQL Editor → New query,
+-- pega el archivo entero → Run. Una vez cada una y en orden (001, 002…).
+-- Lo aplicado queda apuntado en la tabla "migraciones".
 --
 -- Solo el servidor (con la clave secreta) puede leer y escribir:
 -- RLS activado sin políticas y sin permisos para anon/authenticated,
 -- así que la clave pública no da acceso a nada.
 -- =========================================================
+begin;
+
+-- ---------- Registro de migraciones aplicadas ----------
+create table if not exists public.migraciones (
+  nombre text primary key,
+  aplicada timestamptz not null default now()
+);
+comment on table public.migraciones is 'Migraciones de supabase/migrations aplicadas en esta base de datos.';
 
 -- ---------- RPPs ----------
 create table if not exists public.rpps (
@@ -32,11 +44,12 @@ create table if not exists public.inscripciones (
 create index if not exists inscripciones_fecha_rpp_idx on public.inscripciones (fecha, rpp);
 
 -- ---------- Acceso: solo el servidor ----------
+alter table public.migraciones enable row level security;
 alter table public.rpps enable row level security;
 alter table public.inscripciones enable row level security;
 
-revoke all on table public.rpps, public.inscripciones from anon, authenticated;
-grant select, insert, update, delete on table public.rpps, public.inscripciones to service_role;
+revoke all on table public.migraciones, public.rpps, public.inscripciones from anon, authenticated;
+grant select, insert, update, delete on table public.migraciones, public.rpps, public.inscripciones to service_role;
 
 -- ---------- Alta en la lista (atómica) ----------
 -- Comprueba duplicados y topes e inserta en una sola transacción. El bloqueo
@@ -89,15 +102,12 @@ as $$
   select i.fecha, count(*) from public.inscripciones i group by i.fecha;
 $$;
 
+-- Supabase da EXECUTE a anon/authenticated por defecto en las funciones nuevas: se quita
 revoke execute on function public.inscribir(date, text, text, text, integer, integer) from public, anon, authenticated;
 revoke execute on function public.recuento_noches() from public, anon, authenticated;
 grant execute on function public.inscribir(date, text, text, text, integer, integer) to service_role;
 grant execute on function public.recuento_noches() to service_role;
 
--- ---------- RPPs de prueba (los mismos de data/db/rpps.json) ----------
-insert into public.rpps (codigo, nombre, activo) values
-  ('c5y1ritg', 'Prueba 1', true),
-  ('e397qki6', 'Prueba 2', true),
-  ('u8p4bg63', 'Prueba 3', true),
-  ('1xmhuoap', 'Prueba 4', true)
-on conflict (codigo) do nothing;
+insert into public.migraciones (nombre) values ('001_inicial') on conflict (nombre) do nothing;
+
+commit;

@@ -19,7 +19,7 @@ const RPPS = [
 async function arrancar(opciones = {}) {
   const datos = fs.mkdtempSync(path.join(os.tmpdir(), "botanic-"));
   fs.writeFileSync(path.join(datos, "rpps.json"), JSON.stringify(RPPS));
-  const servidor = crearServidor({ datos, claveAdmin: "clave-de-prueba", ahora: AHORA, lista: { tokenMinMs: 0 }, ...opciones });
+  const servidor = crearServidor({ datos, claveAdmin: "clave-de-prueba", ahora: AHORA, tokens: { minMs: 0 }, ...opciones });
   await new Promise((r) => servidor.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${servidor.address().port}`;
   return {
@@ -104,7 +104,7 @@ test("token: falso, ausente o demasiado rápido", async () => {
     assert.equal((await inscribir(s.base, { nombre: "Ana Ruiz" }, { conToken: false })).status, 400);
   } finally { await s.cerrar(); }
 
-  const lento = await arrancar({ lista: {} }); // mínimo real de 3 s
+  const lento = await arrancar({ tokens: {} }); // mínimo real de 3 s
   try {
     assert.equal((await inscribir(lento.base, { nombre: "Ana Ruiz" })).status, 400);
   } finally { await lento.cerrar(); }
@@ -185,7 +185,7 @@ test("login admin limitado a 5 intentos", async () => {
 test("archivos privados y rutas con ../ no se sirven", async () => {
   const s = await arrancar();
   try {
-    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/schema.sql", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
+    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/schema.sql", "/documentacion/PI_DAM2_BotanicSuite_Entrega2.pdf", "/documentacion/", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
       assert.equal((await fetch(s.base + ruta)).status, 404, ruta);
     }
     const index = await fetch(`${s.base}/`);

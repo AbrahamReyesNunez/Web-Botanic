@@ -27,15 +27,18 @@ js/admin.js                      Panel de recuento
 js/compartido/                   Código que usan la web y el servidor
   calendario.js                  Días de apertura y cierre de lista
   nombre.js                      Filtro y normalización de nombres
-server/                          Servidor (server.js, lista.js, admin.js, limites.js)
+  reservas.js                    Precios, buscador y teléfono de las reservas
+server/                          Servidor (server.js, lista.js, reservas.js, admin.js, limites.js)
+  formulario.js                  Token de seguridad de los formularios
   almacen-supabase.js            Datos en Supabase (producción)
   almacen.js                     Datos en JSON (local y pruebas)
   comprobar-supabase.js          npm run comprobar-supabase
-supabase/schema.sql              Tablas y funciones de la base de datos
+supabase/migrations/             Cambios de la base de datos, numerados (001, 002…)
 data/config.js                   Horarios, contacto, días cerrados, topes de la lista
+data/reservados.js               Mesas, precios y bebidas de los reservados
 data/eventos.js                  Títulos/artistas de noches concretas (opcional)
 data/galeria.js                  Índice de fotos (lo genera el script)
-data/db/                         Solo en modo JSON: rpps.json e inscripciones.json (esta no se sube)
+data/db/                         Solo en modo JSON: rpps.json, mesas.json, inscripciones.json y reservas.json (estas dos no se suben)
 img/                             Logo, portadas y galería
 test/                            Pruebas (node --test)
 ```
@@ -46,7 +49,7 @@ test/                            Pruebas (node --test)
   - Con el link de un RPP (`https://dominio/?rpp=CÓDIGO`) abre directamente la lista de la próxima noche y queda fijado en ese RPP, también si la persona navega por la web.
   - Cada RPP tiene además un link de reservados (`https://dominio/?reserva=CÓDIGO`): abre la web en la sección de reservados y la reserva queda asignada a ese RPP. Cada link cuenta solo para lo suyo.
   - Sin link queda en **"Sin RPP"**, así nadie puede asignarse un RPP a mano.
-- **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, con un `codigo` nuevo de 8 letras minúsculas/números aleatorios y su `nombre`. Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
+- **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, escribe solo su `nombre` (el `codigo` del link se genera solo y no puede haber dos RPP con el mismo nombre). Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
 - **Panel** (`/admin.html`, con la clave de `ADMIN_KEY`): inscritos por noche y por RPP con porcentajes, buscador, borrado de nombres colados, exportación a CSV y los dos links de cada RPP (lista y reservados) para copiar.
 - La lista de un día se cierra a las 23:00 de ese día (`cierreListaHora` en `data/config.js`, hora de Madrid).
 
@@ -58,7 +61,18 @@ test/                            Pruebas (node --test)
 | Campo trampa | Campo oculto que solo rellenan los bots: se responde "ok" y no se guarda nada. |
 | Límites por IP | 5 altas cada 10 min, 15 al día y 20 intentos cada 10 min. Login del panel: 5 intentos cada 15 min. |
 | Duplicados y topes | El mismo nombre no puede repetirse en una noche. Topes por noche y por RPP en `data/config.js`. En Supabase se comprueban dentro de la base de datos, así que dos altas simultáneas no se los saltan. |
-| Servidor | Cuerpo máximo de 1 KB, solo JSON y campos conocidos. Cabeceras de seguridad (CSP…). Los archivos internos no se sirven. |
+| Servidor | Cuerpo máximo de 1 KB (8 KB en reservas), solo JSON y campos conocidos. Cabeceras de seguridad (CSP…). Los archivos internos no se sirven. |
+
+## Reservas
+
+La web envía **peticiones**: entran como `pendiente` y el equipo las confirma o rechaza (de momento, en Supabase; más adelante, desde la app).
+
+- **Estados:** `pendiente` → `confirmada` o `rechazada`. `cancelada` si la anula el cliente. `caducada`: la noche pasó sin decidirla (se pone sola).
+- **Aforo:** `tipos_mesa.mesas` dice cuántas mesas hay de cada tipo (pista 30, VIP 7). Solo cuentan las **confirmadas**: mientras queden mesas sin confirmar, se siguen aceptando peticiones. Con todas confirmadas, ese tipo se bloquea esa noche en la web (pista y VIP por separado) y la base de datos no deja confirmar ni una más.
+- **Confirmar o rechazar:** Supabase → **Table Editor → reservas**, cambia `estado`. Para leerlas cómodas, **vista_reservas**: una fila por reserva con el pedido en texto, el RPP y un enlace de WhatsApp al cliente.
+- **Cambiar el aforo:** edita `mesas` en **tipos_mesa**. La web lo nota en unos 30 s.
+- **Precios:** los calcula el servidor con `data/reservados.js`; lo que mande el navegador no cuenta. Cada línea guarda el precio del momento. Al cambiar precios o bebidas, reinicia el servidor (`npm start`) para que los use.
+- **Protección:** las mismas capas que la lista (token, campo trampa, campos conocidos) más: 3 peticiones por hora y 6 al día por IP; una petición activa por teléfono y noche; teléfono en formato internacional; hasta 5 personas por botella; el pedido se comprueba contra el catálogo.
 
 ## Base de datos (Supabase)
 
@@ -66,13 +80,21 @@ Supabase es una base de datos PostgreSQL en la nube con un panel web. Solo habla
 
 | Tabla | Contenido |
 |---|---|
-| `rpps` | `codigo` (el del link), `nombre`, `activo` |
+| `rpps` | `codigo` (el del link, automático), `nombre`, `activo` |
 | `inscripciones` | `fecha` de la noche, `nombre`, `clave` (nombre sin tildes, para duplicados), `rpp`, `creado` |
+| `tipos_mesa` | `tipo` (`pista`, `vip`), `nombre`, `mesas` (aforo por noche) |
+| `reservas` | `fecha`, `tipo`, `estado`, `nombre`, `telefono`, `personas`, `rpp`, `notas`, `total` (€), `a_consultar`, `creado`, `decidido` |
+| `reserva_lineas` | `reserva`, `grupo`, `producto`, `cantidad`, `precio` por unidad (null: a consultar) |
+| `migraciones` | Migraciones aplicadas |
+
+**Migraciones:** cada cambio de la base de datos es un archivo de `supabase/migrations/`. Se aplican **una vez y en orden**: Supabase → **SQL Editor → New query**, pega el archivo entero y pulsa **Run**. La tabla `migraciones` dice cuáles tiene ya tu base de datos. Para un cambio nuevo, crea el siguiente número (`005_….sql`); no edites los ya aplicados.
 
 **Puesta en marcha (una vez por proyecto de Supabase):**
-1. Supabase → **SQL Editor → New query**, pega `supabase/schema.sql` y pulsa **Run**. Se puede volver a ejecutar sin perder datos.
+1. Aplica las migraciones de `supabase/migrations/` en orden (001, 002…). La 001 también vale sobre una base de datos que ya tuviera el antiguo `schema.sql`: no pierde datos.
 2. Supabase → **Project Settings → API Keys**: copia la URL del proyecto y la clave secreta (`sb_secret_…`) a `SUPABASE_URL` y `SUPABASE_SECRET_KEY` en `.env`.
-3. `npm run comprobar-supabase`: lee los RPPs, apunta y borra un nombre de prueba.
+3. `npm run comprobar-supabase`: lee los RPPs, apunta y borra un nombre de prueba y una reserva de prueba.
+
+**Datos personales:** se guardan 30 días después de cada noche. Cada día (pg_cron, migración 004) los nombres de la lista pasan a "Anonimizado" y las reservas pierden nombre, teléfono y comentarios; las filas se quedan para las estadísticas. En modo JSON (solo local) no se anonimiza.
 
 La clave secreta da acceso total a la base de datos: solo en `.env` y en las variables del hosting, nunca en el código, en el README ni en GitHub. Si se filtra, genera otra en el mismo panel.
 
@@ -92,7 +114,7 @@ Para añadir título, artistas, descripción o enlace al post, usa `data/eventos
 En `data/config.js`, añade la fecha a `cerrado` o a `aperturasExtra`.
 
 ## Publicar
-La lista necesita un hosting que ejecute Node.js (Render, Railway, un VPS…); GitHub Pages no sirve. Define `ADMIN_KEY`, `FORM_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y, detrás de un proxy, `TRUST_PROXY=1`. Sin Supabase, los datos se guardan en archivos JSON, que en estos hostings se pierden al redesplegar.
+La lista necesita un hosting que ejecute Node.js (Render, Railway, un VPS…); GitHub Pages no sirve. Define `ADMIN_KEY`, `FORM_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y, detrás de un proxy, `TRUST_PROXY=1`. También con el túnel de Cloudflare (`cloudflared`): sin `TRUST_PROXY=1` todas las visitas llegan desde la misma IP y comparten los límites. Con él, la IP de cada visitante se lee del final de `X-Forwarded-For`, que es la que añade el proxy. Sin Supabase, los datos se guardan en archivos JSON, que en estos hostings se pierden al redesplegar.
 
 ## Flujo de trabajo (2 personas)
 

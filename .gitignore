@@ -13,6 +13,7 @@ desktop.ini
 
 # Datos de la lista (temporal, hasta tener base de datos)
 data/db/inscripciones.json
+data/db/reservas.json
 data/db/*.tmp
 .env
 node_modules/

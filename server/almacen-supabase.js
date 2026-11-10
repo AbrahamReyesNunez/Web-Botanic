@@ -83,7 +83,55 @@ function crearAlmacenSupabase({ url, clave }) {
     return filas.length > 0;
   }
 
-  return { tipo: "supabase", rpps, rppActivo, deNoche, recuentoNoches, anadir, borrar, esperar: () => Promise.resolve() };
+  /* ---------- Reservas (supabase/migrations/003_reservas.sql) ---------- */
+
+  /* Aforo y teléfono repetido se comprueban dentro de la base de datos, en la misma transacción */
+  async function crearReserva(r, lineas) {
+    return datosDe(await db.rpc("crear_reserva", {
+      p_fecha: r.fecha,
+      p_tipo: r.tipo,
+      p_nombre: r.nombre,
+      p_telefono: r.telefono,
+      p_personas: r.personas,
+      p_rpp: r.rpp,
+      p_notas: r.notas || null,
+      p_total: r.total,
+      p_a_consultar: !!r.aConsultar,
+      p_lineas: lineas
+    }), "crear reserva");
+  }
+
+  /* El trigger de la base de datos rechaza confirmar por encima del aforo */
+  async function decidirReserva(id, estado) {
+    const { data, error } = await db.from("reservas").update({ estado }).eq("id", id).select("id");
+    if (error) {
+      if (/Aforo completo/.test(error.message)) return { ok: false, motivo: "completo" };
+      throw new Error(`Supabase (decidir reserva): ${error.message}`);
+    }
+    return data.length ? { ok: true } : { ok: false, motivo: "no_existe" };
+  }
+
+  async function borrarReserva(id) {
+    const filas = datosDe(await db.from("reservas").delete().eq("id", id).select("id"), "borrar reserva");
+    return filas.length > 0;
+  }
+
+  async function disponibilidad(desde, hasta) {
+    const filas = datosDe(await db.rpc("disponibilidad_reservas", { p_desde: desde, p_hasta: hasta }), "disponibilidad");
+    const mesas = {};
+    const confirmadas = [];
+    for (const f of filas) {
+      mesas[f.tipo] = f.mesas;
+      if (f.fecha) confirmadas.push({ fecha: f.fecha, tipo: f.tipo, total: Number(f.confirmadas) });
+    }
+    return { mesas, confirmadas };
+  }
+
+  return {
+    tipo: "supabase", rpps, rppActivo, deNoche, recuentoNoches, anadir, borrar,
+    crearReserva, decidirReserva, borrarReserva, disponibilidad,
+    esperar: () => Promise.resolve()
+  };
 }
 
 module.exports = { crearAlmacenSupabase };

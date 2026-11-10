@@ -4,9 +4,9 @@
    las migraciones de supabase/migrations. Se usa la clave secreta, que
    solo vive en el servidor: el navegador nunca habla con Supabase.
 
-   Reservas: la cabecera va en "reservas" y cada bebida en "reserva_lineas"
-   (grupo, producto, cantidad, precio por unidad). Se crean juntas con la
-   función crear_reserva, en una sola transacción.
+   Reservas (003_reservas.sql): la cabecera va en "reservas" y cada bebida en
+   "reserva_lineas" (grupo, producto, cantidad, precio por unidad). Se crean
+   juntas con la función crear_reserva, en una sola transacción.
    ========================================================= */
 "use strict";
 
@@ -14,7 +14,7 @@ const { createClient } = require("@supabase/supabase-js");
 
 const CACHE_RPPS_MS = 30_000;
 const PAGINA = 1000; // Supabase devuelve como mucho 1000 filas por consulta
-const GRUPOS = ["botellas", "refrescos", "chupitos", "champan"];
+const GRUPOS = ["botellas", "refrescos", "chupitos", "champan", "suplementos"];
 const CAMPOS_RESERVA = "id, fecha, tipo, estado, nombre, telefono, personas, rpp, total, a_consultar, notas, creado, decidido, "
   + "reserva_lineas(grupo, producto, cantidad, precio)";
 
@@ -137,36 +137,48 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     return fila;
   }
 
-  /* Guarda la reserva y sus bebidas a la vez (función crear_reserva).
-     Devuelve { ok: true, reserva } o { ok: false, motivo } si la base de datos la rechaza */
-  async function crearReserva(reserva) {
-    const lineas = [];
-    for (const grupo of GRUPOS) {
-      for (const l of reserva[grupo] || []) lineas.push({ grupo, producto: l.nombre, cantidad: l.cantidad, precio: l.precio ?? null });
-    }
-    const r = await db.rpc("crear_reserva", {
-      p_fecha: reserva.fecha,
-      p_tipo: reserva.tipo,
-      p_nombre: reserva.nombre,
-      p_telefono: reserva.telefono,
-      p_personas: reserva.personas,
-      p_rpp: reserva.rpp,
-      p_notas: reserva.notas,
-      p_total: reserva.total,
-      p_a_consultar: reserva.aConsultar,
+  /* ---------- Reservas (supabase/migrations/003_reservas.sql) ---------- */
+
+  /* Aforo y teléfono repetido se comprueban dentro de la base de datos, en la misma transacción */
+  async function crearReserva(r, lineas) {
+    return datosDe(await db.rpc("crear_reserva", {
+      p_fecha: r.fecha,
+      p_tipo: r.tipo,
+      p_nombre: r.nombre,
+      p_telefono: r.telefono,
+      p_personas: r.personas,
+      p_rpp: r.rpp,
+      p_notas: r.notas || null,
+      p_total: r.total,
+      p_a_consultar: !!r.aConsultar,
       p_lineas: lineas
-    });
-    // Una regla de la tabla (check) que no se cumple: datos que la base de datos no acepta
-    if (r.error && r.error.code === "23514") {
-      console.error(`Supabase (guardar reserva): ${r.error.message}`);
-      return { ok: false, motivo: "datos" };
+    }), "crear reserva");
+  }
+
+  /* El trigger de la base de datos rechaza confirmar por encima del aforo */
+  async function decidirReserva(id, estado) {
+    const { data, error } = await db.from("reservas").update({ estado }).eq("id", id).select("id");
+    if (error) {
+      if (/Aforo completo/.test(error.message)) return { ok: false, motivo: "completo" };
+      throw new Error(`Supabase (decidir reserva): ${error.message}`);
     }
-    const res = datosDe(r, "guardar reserva");
-    if (res && res.ok === false) return { ok: false, motivo: res.motivo || "datos" };
-    // La función devuelve el id (o un objeto con él); se acepta cualquiera de las dos formas
-    const id = typeof res === "string" ? res : res && (res.id || (res.reserva && (res.reserva.id || res.reserva)));
-    if (!id) throw new Error(`Supabase (guardar reserva): respuesta inesperada ${JSON.stringify(res)}`);
-    return { ok: true, reserva: { id: String(id), estado: "pendiente", ...reserva } };
+    return data.length ? { ok: true } : { ok: false, motivo: "no_existe" };
+  }
+
+  async function borrarReserva(id) {
+    const filas = datosDe(await db.from("reservas").delete().eq("id", id).select("id"), "borrar reserva");
+    return filas.length > 0;
+  }
+
+  async function disponibilidad(desde, hasta) {
+    const filas = datosDe(await db.rpc("disponibilidad_reservas", { p_desde: desde, p_hasta: hasta }), "disponibilidad");
+    const mesas = {};
+    const confirmadas = [];
+    for (const f of filas) {
+      mesas[f.tipo] = f.mesas;
+      if (f.fecha) confirmadas.push({ fecha: f.fecha, tipo: f.tipo, total: Number(f.confirmadas) });
+    }
+    return { mesas, confirmadas };
   }
 
   async function actualizarRpp(codigo, cambios) {
@@ -188,8 +200,10 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
   }
 
   return {
-    tipo: "supabase", rpps, rppActivo, deNoche, recuentoNoches, reservasDeNoche,
-    recuentoReservas, crearReserva, anadir, borrar, crearRpp, actualizarRpp, leerContenido, guardarContenido,
+    tipo: "supabase", rpps, rppActivo, deNoche, recuentoNoches, anadir, borrar,
+    crearRpp, actualizarRpp, reservasDeNoche, recuentoReservas,
+    crearReserva, decidirReserva, borrarReserva, disponibilidad,
+    leerContenido, guardarContenido,
     esperar: () => Promise.resolve()
   };
 }

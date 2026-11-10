@@ -19,7 +19,7 @@ const RPPS = [
 async function arrancar(opciones = {}) {
   const datos = fs.mkdtempSync(path.join(os.tmpdir(), "botanic-"));
   fs.writeFileSync(path.join(datos, "rpps.json"), JSON.stringify(RPPS));
-  const servidor = crearServidor({ datos, claveAdmin: "clave-de-prueba", ahora: AHORA, lista: { tokenMinMs: 0 }, ...opciones });
+  const servidor = crearServidor({ datos, claveAdmin: "clave-de-prueba", ahora: AHORA, tokens: { minMs: 0 }, ...opciones });
   await new Promise((r) => servidor.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${servidor.address().port}`;
   return {
@@ -108,7 +108,7 @@ test("token: falso, ausente o demasiado rápido", async () => {
     assert.equal((await inscribir(s.base, { nombre: "Ana Ruiz" }, { conToken: false })).status, 400);
   } finally { await s.cerrar(); }
 
-  const lento = await arrancar({ lista: {} }); // mínimo real de 3 s
+  const lento = await arrancar({ tokens: {} }); // mínimo real de 3 s
   try {
     assert.equal((await inscribir(lento.base, { nombre: "Ana Ruiz" })).status, 400);
   } finally { await lento.cerrar(); }
@@ -233,20 +233,18 @@ test("reservas: guarda pista y VIP y el panel cuenta mesas y exporta bebidas", a
       telefono: "671 434 657",
       personas: 4,
       rpp: "aaaa1111",
-      refrescos: [{ nombre: "Coca-Cola", cantidad: 10 }],
-      chupitos: [],
-      champan: [],
       notas: ""
     };
-    const pista = await crear({ ...base, tipo: "pista", botellas: [{ nombre: "Ron Barceló", cantidad: 1 }] });
+    const pista = await crear({ ...base, tipo: "pista", carrito: [
+      { grupo: "botellas", nombre: "Ron Barceló", cantidad: 1 },
+      { grupo: "refrescos", nombre: "Coca-Cola", cantidad: 10 }
+    ] });
     assert.equal(pista.status, 201);
-    const vip = await crear({
-      ...base,
-      nombre: "Luis Mora",
-      tipo: "vip",
-      botellas: [{ nombre: "Ron Brugal", cantidad: 2 }],
-      refrescos: [{ nombre: "Sprite", cantidad: 20 }]
-    });
+    // Un teléfono por noche: la segunda reserva va con otro
+    const vip = await crear({ ...base, nombre: "Luis Mora", telefono: "600 111 222", tipo: "vip", carrito: [
+      { grupo: "botellas", nombre: "Ron Brugal", cantidad: 2 },
+      { grupo: "refrescos", nombre: "Sprite", cantidad: 20 }
+    ] });
     assert.equal(vip.status, 201);
 
     await s.servidor.almacen.esperar();
@@ -255,8 +253,8 @@ test("reservas: guarda pista y VIP y el panel cuenta mesas y exporta bebidas", a
     assert.equal(reservasGuardadas(s)[0].estado, "pendiente");
     // Teléfono en formato internacional, como lo exige la base de datos
     assert.equal(reservasGuardadas(s)[0].telefono, "+34671434657");
-    assert.equal((await crear({ ...base, tipo: "pista", telefono: "12345", botellas: [{ nombre: "Ron Barceló", cantidad: 1 }] })).status, 400);
-    assert.equal((await crear({ ...base, tipo: "pista", botellas: [{ nombre: "Inventada", cantidad: 1 }] })).status, 400);
+    assert.equal((await crear({ ...base, telefono: "12345", tipo: "pista", carrito: [{ grupo: "botellas", nombre: "Ron Barceló", cantidad: 1 }, { grupo: "refrescos", nombre: "Coca-Cola", cantidad: 10 }] })).status, 400);
+    assert.equal((await crear({ ...base, telefono: "600 333 444", tipo: "pista", carrito: [{ grupo: "botellas", nombre: "Inventada", cantidad: 1 }] })).status, 400);
     assert.equal((await fetch(`${s.base}/api/admin/reservas?fecha=${NOCHE}`)).status, 401);
 
     const login = await fetch(`${s.base}/api/admin/login`, {
@@ -293,7 +291,7 @@ test("login admin limitado a 5 intentos", async () => {
 test("archivos privados y rutas con ../ no se sirven", async () => {
   const s = await arrancar();
   try {
-    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/migrations/005_web_contenido.sql", "/google-apps-script/Codigo.gs", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
+    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/migrations/001_inicial.sql", "/supabase/migrations/005_web_contenido.sql", "/google-apps-script/Codigo.gs", "/documentacion/PI_DAM2_BotanicSuite_Entrega2.pdf", "/documentacion/", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
       assert.equal((await fetch(s.base + ruta)).status, 404, ruta);
     }
     const index = await fetch(`${s.base}/`);

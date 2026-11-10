@@ -23,7 +23,7 @@ function driveFalso() {
 async function arrancar() {
   const datos = fs.mkdtempSync(path.join(os.tmpdir(), "botanic-"));
   const drive = driveFalso();
-  const servidor = crearServidor({ datos, claveAdmin: "clave-de-prueba", ahora: AHORA, lista: { tokenMinMs: 0 }, drive });
+  const servidor = crearServidor({ datos, claveAdmin: "clave-de-prueba", ahora: AHORA, tokens: { minMs: 0 }, drive });
   await servidor.listo;
   await new Promise((r) => servidor.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${servidor.address().port}`;

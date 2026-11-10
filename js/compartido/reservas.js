@@ -11,6 +11,7 @@
   "use strict";
 
   const GRUPOS = ["botellas", "chupitos", "champan", "refrescos"];
+  const MAX_POR_LINEA = 10; // unidades de cada bebida (los refrescos solo tienen el límite de los incluidos)
   const DIA_POR_DEFECTO = 6; // noches especiales fuera de miércoles-sábado: precio de sábado
 
   /* Minúsculas, sin tildes ni apóstrofos y solo letras/números separados por un espacio */
@@ -74,8 +75,18 @@
 
   const itemDe = (cat, grupo, nombre) => (cat[grupo] || []).find((i) => i.nombre === nombre);
 
-  /* Desglose del carrito ([{ grupo, nombre, cantidad }]) para una noche (getDay) y un tipo de mesa */
-  function calcular(cat, carrito, dia, tipo) {
+  /* Teléfono en formato internacional (+34600123123) o null si no es válido.
+     Sin prefijo, un móvil o fijo español de 9 cifras recibe el +34. */
+  function normalizarTelefono(texto) {
+    let t = String(texto ?? "").trim().replace(/[\s.\-()/]/g, "");
+    if (t.startsWith("00")) t = "+" + t.slice(2);
+    if (/^[6789]\d{8}$/.test(t)) t = "+34" + t;
+    return /^\+[1-9]\d{7,14}$/.test(t) ? t : null;
+  }
+
+  /* Desglose del carrito ([{ grupo, nombre, cantidad }]) para una noche (getDay) y un tipo de mesa.
+     Con { personas }, comprueba también que no pasen de las que admiten las botellas. */
+  function calcular(cat, carrito, dia, tipo, { personas } = {}) {
     const lineas = [];
     const suplementos = [];
     let total = 0;
@@ -102,6 +113,7 @@
     });
 
     const refrescosMax = botellas * ((cat.precios || {}).refrescosPorBotella || 0);
+    const personasMax = botellas * ((cat.precios || {}).personasPorBotella || 0);
     const minBotellas = ((cat.tipos || {})[tipo] || {}).minBotellas || 0;
     const errores = [];
     if (botellas < minBotellas) {
@@ -115,9 +127,12 @@
         ? `Te ${faltan === 1 ? "falta 1 refresco" : `faltan ${faltan} refrescos`}: con ${botellas} ${botellas === 1 ? "botella" : "botellas"} van ${refrescosMax} incluidos.`
         : `Con ${botellas} ${botellas === 1 ? "botella" : "botellas"} van ${refrescosMax} refrescos incluidos y has elegido ${refrescos}.`);
     }
+    if (personas !== undefined && botellas && personasMax && personas > personasMax) {
+      errores.push(`Con ${botellas} ${botellas === 1 ? "botella" : "botellas"} podéis venir hasta ${personasMax} personas: añade otra botella o indica menos personas.`);
+    }
 
-    return { lineas, suplementos, total, aConsultar, botellas, refrescos, refrescosMax, minBotellas, errores };
+    return { lineas, suplementos, total, aConsultar, botellas, refrescos, refrescosMax, personasMax, minBotellas, errores };
   }
 
-  return { GRUPOS, normalizar, buscar, precioDe, calcular };
+  return { GRUPOS, MAX_POR_LINEA, normalizar, normalizarTelefono, buscar, precioDe, calcular };
 });

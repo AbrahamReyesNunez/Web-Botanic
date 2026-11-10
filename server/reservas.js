@@ -1,148 +1,173 @@
 /* =========================================================
-   SOLICITUDES DE RESERVADOS: validación, límites y persistencia
+   PETICIONES DE RESERVA
+   Capas: campos permitidos → campo trampa → token de formulario →
+   límite por IP → tipo de mesa → fecha → nombre, teléfono, personas,
+   RPP y comentarios → pedido (contra el catálogo) → aforo y teléfono
+   repetido (en el almacén, en la misma transacción que el alta).
+   El total lo calcula el servidor con data/reservados.js: lo que mande el
+   navegador como precio no se usa.
    ========================================================= */
 "use strict";
 
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
 const BotanicNombre = require("../js/compartido/nombre.js");
-const BotanicReservas = require("../js/compartido/reservas.js");
+const Reservas = require("../js/compartido/reservas.js");
 const { crearLimitador } = require("./limites.js");
 
-const archivoCatalogo = path.join(__dirname, "..", "data", "reservados.js");
-const contexto = { window: {} };
-vm.runInNewContext(fs.readFileSync(archivoCatalogo, "utf8"), contexto);
-const CATALOGO = contexto.window.BOTANIC_RESERVADOS;
-
-const GRUPOS = ["botellas", "refrescos", "chupitos", "champan"];
-const CAMPOS = new Set([
-  "fecha", "tipo", "nombre", "telefono", "personas", "rpp",
-  ...GRUPOS, "notas", "token"
-]);
-const DIAS_VISTA_MAX = 180;
+const CAMPOS = new Set(["tipo", "fecha", "nombre", "telefono", "personas", "rpp", "notas", "carrito", "token", "web"]);
+const CAMPOS_LINEA = ["cantidad", "grupo", "nombre"];
+const RECHAZOS = {
+  completo: "Ya no quedan mesas de este tipo para esa noche. Prueba otra noche u otro tipo de mesa.",
+  duplicado: "Ya hay una petición de reserva para esa noche con este teléfono. Si quieres cambiarla, escríbenos por WhatsApp.",
+  tipo: "Ese tipo de mesa no está disponible."
+};
+const DIAS_VISTA_MAX = 60;       // hasta cuándo se puede pedir mesa
+const MAX_LINEAS = 40;
+const MAX_REFRESCOS_LINEA = 300;
+const MAX_NOTAS = 500;
+const CACHE_DISPONIBILIDAD_MS = 30_000;
 const MIN = 60_000;
 
-/* Teléfono en formato internacional (+34600000000): así lo guarda la base de datos y sirve para WhatsApp.
-   Un número español sin prefijo (9 cifras que empiezan por 6, 7, 8 o 9) se toma como +34. */
-function telefonoInternacional(texto) {
-  if (typeof texto !== "string") return null;
-  let t = texto.replace(/[\s.()-]/g, "");
-  if (t.startsWith("00")) t = "+" + t.slice(2);
-  if (/^[6-9]\d{8}$/.test(t)) t = "+34" + t;
-  else if (/^\d{10,15}$/.test(t)) t = "+" + t;
-  return /^\+[1-9]\d{8,14}$/.test(t) ? t : null;
+const esObjeto = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
+const tiene = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
+
+/* Comentario de texto plano: sin caracteres de control (salvo saltos de línea) ni espacios sobrantes */
+function limpiarNotas(texto) {
+  return texto.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/* Motivos con los que la base de datos (crear_reserva) puede rechazar una reserva */
-const MOTIVOS = {
-  tipo: "Tipo de mesa no válido.",
-  fecha: "Esa noche no está disponible para reservar.",
-  rpp: "El link de RPP ya no es válido.",
-  telefono: "Teléfono no válido.",
-  personas: "El número de personas debe estar entre 1 y 30.",
-  completo: "Ya no quedan mesas de ese tipo para esa noche.",
-  lleno: "Ya no quedan mesas de ese tipo para esa noche.",
-  aforo: "Ya no quedan mesas de ese tipo para esa noche."
-};
-
-function crearReservas({ almacen, cal, validarToken }) {
+function crearReservas({ almacen, cal, cat, tokens }) {
   const intentos = crearLimitador([{ ms: 10 * MIN, max: 20 }]);
-  const altas = crearLimitador([{ ms: 10 * MIN, max: 5 }, { ms: 24 * 60 * MIN, max: 15 }]);
-  const error = (status, mensaje, esperar) => ({
-    status,
-    cuerpo: { ok: false, error: mensaje },
-    ...(esperar ? { cabeceras: { "Retry-After": String(esperar) } } : {})
-  });
+  const altas = crearLimitador([{ ms: 60 * MIN, max: 3 }, { ms: 24 * 60 * MIN, max: 6 }]);
 
-  function normalizarGrupo(grupo, valor) {
-    if (!Array.isArray(valor) || valor.length > (CATALOGO[grupo] || []).length) return null;
-    const permitidos = new Set((CATALOGO[grupo] || []).map((item) => item.nombre));
-    const usados = new Set();
-    const items = [];
-    for (const linea of valor) {
-      if (!linea || typeof linea !== "object" || !permitidos.has(linea.nombre)
-        || !Number.isInteger(linea.cantidad) || linea.cantidad < 1 || linea.cantidad > 30
-        || usados.has(linea.nombre)) return null;
-      usados.add(linea.nombre);
-      items.push({ grupo, nombre: linea.nombre, cantidad: linea.cantidad });
+  const error = (status, mensaje, extra) => ({ status, cuerpo: { ok: false, error: mensaje }, ...extra });
+  const demasiados = (esperar) => error(429, "Demasiados intentos. Prueba de nuevo más tarde.", { cabeceras: { "Retry-After": String(esperar) } });
+
+  /* ---------- Disponibilidad: qué tipos de mesa están completos cada noche ----------
+     Solo dice completo / no completo (no cuántas mesas quedan). Se guarda 30 s:
+     las confirmaciones las hace el equipo, no cambian a cada visita. */
+  let cache = null;
+  let cacheHasta = 0;
+  let pendiente = null;
+
+  async function leerDisponibilidad() {
+    const hoy = cal.today();
+    const desde = cal.keyOf(hoy);
+    const hasta = cal.keyOf(cal.addDays(hoy, DIAS_VISTA_MAX));
+    const { mesas, confirmadas } = await almacen.disponibilidad(desde, hasta);
+    const completas = {};
+    for (const { fecha, tipo, total } of confirmadas) {
+      if (tiene(mesas, tipo) && total >= mesas[tipo]) (completas[fecha] ||= []).push(tipo);
     }
-    return items;
+    // Un tipo sin mesas (0) está completo todas las noches
+    const sinMesas = Object.keys(mesas).filter((t) => mesas[t] <= 0);
+    return { tipos: Object.keys(mesas), sinMesas, completas };
+  }
+
+  function disponibilidad() {
+    if (cache && Date.now() < cacheHasta) return Promise.resolve(cache);
+    pendiente ??= leerDisponibilidad()
+      .then((d) => { cache = d; cacheHasta = Date.now() + CACHE_DISPONIBILIDAD_MS; return d; })
+      .catch((e) => { if (!cache) throw e; console.error(e.message); return cache; })
+      .finally(() => { pendiente = null; });
+    return pendiente;
+  }
+  const olvidarDisponibilidad = () => { cacheHasta = 0; };
+
+  async function respuestaDisponibilidad() {
+    const d = await disponibilidad();
+    return { status: 200, cuerpo: { ok: true, sinMesas: d.sinMesas, completas: d.completas } };
+  }
+
+  /* ---------- Pedido: valida el carrito contra el catálogo ---------- */
+  function leerCarrito(carrito) {
+    if (!Array.isArray(carrito) || carrito.length === 0 || carrito.length > MAX_LINEAS) return null;
+    const vistos = new Set();
+    const out = [];
+    for (const x of carrito) {
+      if (!esObjeto(x) || Object.keys(x).sort().join() !== CAMPOS_LINEA.join()) return null;
+      const { grupo, nombre, cantidad } = x;
+      if (!Reservas.GRUPOS.includes(grupo) || typeof nombre !== "string" || nombre.length > 60) return null;
+      if (!(cat[grupo] || []).some((i) => i.nombre === nombre)) return null;
+      const max = grupo === "refrescos" ? MAX_REFRESCOS_LINEA : Reservas.MAX_POR_LINEA;
+      if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > max) return null;
+      const k = `${grupo}|${nombre}`;
+      if (vistos.has(k)) return null;
+      vistos.add(k);
+      out.push({ grupo, nombre, cantidad });
+    }
+    return out;
   }
 
   async function crear(datos, ip) {
-    const limite = intentos.comprobar(ip);
-    if (!limite.ok) return error(429, "Demasiados intentos. Prueba de nuevo más tarde.", limite.esperar);
+    const lim = intentos.comprobar(ip);
+    if (!lim.ok) return demasiados(lim.esperar);
     intentos.anotar(ip);
 
-    if (!datos || typeof datos !== "object" || Array.isArray(datos)
-      || Object.keys(datos).some((campo) => !CAMPOS.has(campo))) {
-      return error(400, "Petición de reserva no válida.");
-    }
-    if (!validarToken(datos.token)) return error(400, "El formulario ha caducado. Recarga la página e inténtalo de nuevo.");
+    if (!esObjeto(datos) || Object.keys(datos).some((k) => !CAMPOS.has(k))) return error(400, "Petición no válida.");
 
-    const limiteAlta = altas.comprobar(ip);
-    if (!limiteAlta.ok) return error(429, "Demasiadas solicitudes. Prueba de nuevo más tarde.", limiteAlta.esperar);
+    // Campo trampa relleno: es un bot. Se le responde como si todo fuera bien y no se guarda nada.
+    if (datos.web) return { status: 201, cuerpo: { ok: true, referencia: Math.random().toString(16).slice(2, 10).toUpperCase() } };
 
-    const { fecha, tipo } = datos;
+    if (!tokens.valido(datos.token)) return error(400, "El formulario ha caducado. Recarga la página e inténtalo de nuevo.");
+
+    const limAlta = altas.comprobar(ip);
+    if (!limAlta.ok) return demasiados(limAlta.esperar);
+
+    const { tipo, fecha } = datos;
+    if (typeof tipo !== "string" || !tiene(cat.tipos || {}, tipo)) return error(400, "Tipo de mesa no válido.");
+
     if (!cal.esClaveValida(fecha)) return error(400, "Fecha no válida.");
-    const noche = cal.fromKey(fecha);
-    if (!cal.isOpen(noche) || noche < cal.today()
-      || noche > cal.addDays(cal.today(), DIAS_VISTA_MAX)) return error(400, "Esa noche no está disponible para reservar.");
-    if (!Object.hasOwn(CATALOGO.tipos, tipo)) return error(400, "Tipo de mesa no válido.");
+    const d = cal.fromKey(fecha);
+    if (!cal.isOpen(d)) return error(400, "Esa noche no abrimos.");
+    if (!cal.listaAbierta(d)) return error(400, "Ya no se puede reservar para esa noche.");
+    if (d > cal.addDays(cal.today(), DIAS_VISTA_MAX)) return error(400, "Aún no se puede reservar para esa noche.");
 
-    const nombre = BotanicNombre.validar(datos.nombre);
-    if (!nombre.ok) return error(400, nombre.error);
-    const telefono = telefonoInternacional(datos.telefono);
-    if (!telefono) return error(400, "Teléfono no válido.");
-    if (!Number.isInteger(datos.personas) || datos.personas < 1 || datos.personas > 30) {
-      return error(400, "El número de personas debe estar entre 1 y 30.");
-    }
-    if (typeof datos.notas !== "string" || datos.notas.length > 500) return error(400, "Los comentarios superan el límite permitido.");
+    const v = BotanicNombre.validar(datos.nombre);
+    if (!v.ok) return error(400, v.error);
+
+    const telefono = typeof datos.telefono === "string" && datos.telefono.length <= 30 ? Reservas.normalizarTelefono(datos.telefono) : null;
+    if (!telefono) return error(400, "Escribe un teléfono válido.");
+
+    const { personas } = datos;
+    if (!Number.isInteger(personas) || personas < 1 || personas > 30) return error(400, "Indica cuántas personas venís (1 a 30).");
 
     let rpp = null;
-    if (datos.rpp !== null && datos.rpp !== undefined && datos.rpp !== "") {
+    if (datos.rpp !== undefined && datos.rpp !== null && datos.rpp !== "") {
       if (typeof datos.rpp !== "string" || !/^[a-z0-9]{4,32}$/.test(datos.rpp)) return error(400, "RPP no válido.");
       rpp = await almacen.rppActivo(datos.rpp);
       if (!rpp) return error(400, "El link de RPP ya no es válido.");
     }
 
-    const lineas = [];
-    for (const grupo of GRUPOS) {
-      const items = normalizarGrupo(grupo, datos[grupo]);
-      if (!items) return error(400, "La selección de bebidas no es válida.");
-      lineas.push(...items);
+    let notas = "";
+    if (datos.notas !== undefined && datos.notas !== null) {
+      if (typeof datos.notas !== "string" || datos.notas.length > MAX_NOTAS * 2) return error(400, "Comentario no válido.");
+      notas = limpiarNotas(datos.notas);
+      if (notas.length > MAX_NOTAS) return error(400, `El comentario puede tener hasta ${MAX_NOTAS} caracteres.`);
     }
-    const calculo = BotanicReservas.calcular(CATALOGO, lineas, noche.getDay(), tipo);
-    if (calculo.errores.length) return error(400, calculo.errores[0]);
 
-    // Cada bebida con su precio por unidad de esa noche (null = a consultar, 0 = incluido)
-    const deGrupo = (grupo) => calculo.lineas.filter((x) => x.grupo === grupo)
-      .map(({ nombre, cantidad, precio }) => ({ nombre, cantidad, precio }));
-    const r = await almacen.crearReserva({
-      fecha,
-      tipo,
-      nombre: nombre.nombre,
-      telefono,
-      personas: datos.personas,
-      rpp: rpp ? rpp.codigo : null,
-      botellas: deGrupo("botellas"),
-      refrescos: deGrupo("refrescos"),
-      chupitos: deGrupo("chupitos"),
-      champan: deGrupo("champan"),
-      total: Math.round(calculo.total),
-      aConsultar: calculo.aConsultar,
-      notas: datos.notas.trim()
-    });
-    if (!r.ok) {
-      const lleno = ["completo", "lleno", "aforo"].includes(r.motivo);
-      return error(lleno ? 409 : 400, MOTIVOS[r.motivo] || "No se ha podido registrar la reserva. Revisa los datos e inténtalo de nuevo.");
+    const carrito = leerCarrito(datos.carrito);
+    if (!carrito) return error(400, "El pedido no es válido. Recarga la página e inténtalo de nuevo.");
+    const r = Reservas.calcular(cat, carrito, d.getDay(), tipo, { personas });
+    if (r.errores.length) return error(400, r.errores[0]);
+
+    const lineas = r.lineas.map((l) => ({ grupo: l.grupo, producto: l.nombre, cantidad: l.cantidad, precio: l.precio }))
+      .concat(r.suplementos.map((s) => ({ grupo: "suplementos", producto: s.nombre, cantidad: 1, precio: s.importe })));
+
+    const res = await almacen.crearReserva({
+      fecha, tipo, nombre: v.nombre, telefono, personas, rpp: rpp ? rpp.codigo : null,
+      notas, total: r.total, aConsultar: r.aConsultar
+    }, lineas);
+    if (!res.ok) {
+      if (res.motivo === "completo") olvidarDisponibilidad();
+      // "motivo" permite a la web reaccionar (p. ej. volver a elegir noche si se ha completado)
+      return { status: 409, cuerpo: { ok: false, error: RECHAZOS[res.motivo] || "No se ha podido enviar la reserva.", motivo: res.motivo } };
     }
+
     altas.anotar(ip);
-    return { status: 201, cuerpo: { ok: true, id: r.reserva.id } };
+    return { status: 201, cuerpo: { ok: true, referencia: res.id.slice(0, 8).toUpperCase(), total: r.total, telefono } };
   }
 
-  return { crear, cerrar: () => { intentos.cerrar(); altas.cerrar(); } };
+  return { crear, disponibilidad: respuestaDisponibilidad, cerrar: () => { intentos.cerrar(); altas.cerrar(); } };
 }
 
-module.exports = { crearReservas, telefonoInternacional };
+module.exports = { crearReservas };

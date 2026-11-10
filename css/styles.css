@@ -1050,6 +1050,8 @@ img.rota { opacity: 0; }
 .res-opcion-txt { flex: 1; min-width: 0; display: grid; gap: .2rem; }
 .res-opcion-titulo { font-family: var(--font-display); font-weight: 800; font-size: clamp(.95rem, 2.6vw, 1.15rem); text-transform: uppercase; }
 .res-opcion-sub { color: var(--muted); font-size: .9rem; }
+/* Tipo de mesa completo todas las próximas noches */
+.res-opcion.completa .res-opcion-sub { color: var(--danger); }
 .res-opcion-flecha { font-size: 1.3rem; color: var(--muted); transition: transform .4s var(--ease-out), color .3s; }
 .res-opcion:hover .res-opcion-flecha { color: #fff; transform: translateX(4px); }
 .res-opcion.active .res-opcion-flecha { color: var(--neon); transform: rotate(180deg); }
@@ -1118,6 +1120,14 @@ img.rota { opacity: 0; }
 }
 .res-card-desc { margin: 0 0 1.1rem; color: var(--muted); }
 .res-incluye { list-style: none; padding: 0; margin: 0 0 1.3rem; display: grid; gap: .55rem; }
+.res-completo {
+  margin: 0 0 1rem; padding: .7rem .9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,107,125,.4);
+  background: rgba(255,107,125,.08);
+  font-size: .9rem;
+}
+.res-completo a { color: var(--neon-soft); }
 .res-incluye li { padding-left: 1.6rem; position: relative; }
 .res-incluye li::before {
   content: ""; position: absolute; left: 0; top: .55em;
@@ -1320,6 +1330,11 @@ img.rota { opacity: 0; }
 .res-noche:has(input:checked) .res-noche-dia { color: var(--neon-soft); }
 .res-noche:has(input:checked) .res-noche-precio { background: var(--neon); color: #fff; }
 .res-noche-evento { max-width: 100%; margin-top: .3rem; font-size: .66rem; color: var(--neon-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Noche sin mesas libres de este tipo */
+.res-noche.completa { opacity: .45; cursor: not-allowed; }
+.res-noche.completa:hover { border-color: var(--line); transform: none; }
+.res-noche.completa .res-noche-precio { background: rgba(255,107,125,.15); color: var(--danger); }
+.res-referencia strong { font-family: var(--font-display); letter-spacing: .12em; color: var(--neon-soft); }
 
 /* Buscador de bebidas con sugerencias */
 .res-grupo { margin: 0; }

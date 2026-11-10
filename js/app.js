@@ -459,7 +459,8 @@
           "aria-label": `${fechaLarga(d)}, ${n.titulo}`,
           "aria-expanded": cal.selected === k ? "true" : "false"
         });
-        cell.appendChild(coverEl(d));
+        // Solo los días con evento llevan imagen en el calendario
+        if (EVENTOS[k]) cell.appendChild(coverEl(d));
         cell.appendChild(el("span", { class: "cal-num" }, String(day)));
         cell.appendChild(el("span", { class: "cal-label" }, esc(n.titulo)));
         cell.addEventListener("click", () => toggleDia(k));

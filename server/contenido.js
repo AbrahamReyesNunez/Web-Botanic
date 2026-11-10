@@ -97,14 +97,19 @@ function crearContenido({ almacen, cal, drive }) {
     return ok({ evento });
   }
 
+  /* Quitar (o cancelar) un evento deja el día cerrado: en la web, la lista y las reservas.
+     Si ese día ya está cerrado según data/config.js, basta con quitar el cambio del panel */
   async function borrarEvento(fecha) {
     if (!cal.esClaveValida(fecha)) return error(400, "Fecha no válida.");
     const anterior = datos.eventos[fecha];
     if (!anterior) return error(404, "Ese día no tiene evento.");
     const { [fecha]: _, ...resto } = datos.eventos;
     await guardar("eventos", resto);
+    const { [fecha]: __, ...otrosDias } = datos.dias;
+    const dia = cal.abiertoPorConfig(cal.fromKey(fecha)) ? "cerrado" : null;
+    await guardar("dias", dia ? { ...otrosDias, [fecha]: dia } : otrosDias);
     borrarFotoDrive(anterior.foto);
-    return ok();
+    return ok({ dia });
   }
 
   /* Sube una foto de evento a Drive y devuelve su id. El evento se guarda aparte con guardarEvento */

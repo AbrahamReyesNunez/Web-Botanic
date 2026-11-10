@@ -157,7 +157,6 @@
 .adm-punto { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .adm-punto.abierto { background: rgba(47, 224, 168, .35); border: 1px solid var(--leaf); }
 .adm-punto.cerrado { background: rgba(255, 255, 255, .04); border: 1px solid var(--line); }
-.adm-punto.cambiado { background: transparent; border: 2px dashed var(--neon-soft); }
 .adm-punto.evento { background: var(--neon); }
 .adm-semana, .adm-mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .adm-semana { margin-bottom: 6px; color: var(--muted); font-size: .72rem; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
@@ -176,7 +175,6 @@
 }
 .adm-celda:hover, .adm-celda:focus-visible { border-color: var(--neon-soft); }
 .adm-celda.abierto { background: rgba(47, 224, 168, .1); border-color: rgba(47, 224, 168, .45); color: var(--text); }
-.adm-celda.cambiado { border-style: dashed; border-width: 2px; border-color: var(--neon-soft); }
 .adm-celda.hoy .adm-celda-num { background: var(--leaf); color: #04140f; }
 .adm-celda.elegido { box-shadow: 0 0 0 2px var(--neon), 0 0 18px -4px rgba(255, 58, 216, .7); }
 .adm-celda-num { position: relative; z-index: 1; min-width: 1.6em; padding: 0 .3em; border-radius: 6px; font-weight: 700; font-size: .85rem; text-align: center; }

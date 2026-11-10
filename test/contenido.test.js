@@ -85,8 +85,12 @@ test("eventos: crear, validar, cambiar la foto y quitar", async () => {
     await s.enviar(`/api/admin/evento/${NOCHE}`, "PUT", { titulo: "Noche Tropical", foto: foto2 });
     assert.deepEqual(s.drive.borradas, [foto1]);
 
-    assert.equal((await s.enviar(`/api/admin/evento/${NOCHE}`, "DELETE")).status, 200);
+    const quitado = await s.enviar(`/api/admin/evento/${NOCHE}`, "DELETE");
+    assert.equal(quitado.status, 200);
+    assert.equal((await quitado.json()).dia, "cerrado");
     assert.equal((await s.web()).eventos[NOCHE], undefined);
+    // Quitar el evento deja el día cerrado (era miércoles, abierto por defecto)
+    assert.equal((await s.web()).dias[NOCHE], "cerrado");
     assert.deepEqual(s.drive.borradas, [foto1, foto2]);
     assert.equal((await s.enviar(`/api/admin/evento/${NOCHE}`, "DELETE")).status, 404);
 
@@ -154,4 +158,16 @@ test("si falta la tabla en Supabase, el panel recibe un mensaje claro (no 'Error
   } finally {
     console.error = errorOriginal;
   }
+});
+
+test("quitar el evento de un día que normalmente está cerrado no deja ningún cambio guardado", async () => {
+  const s = await arrancar();
+  try {
+    const lunes = "2026-10-19";
+    await s.enviar(`/api/admin/dia/${lunes}`, "PUT", { estado: "abierto" });
+    await s.enviar(`/api/admin/evento/${lunes}`, "PUT", { titulo: "Fiesta especial" });
+    const r = await (await s.enviar(`/api/admin/evento/${lunes}`, "DELETE")).json();
+    assert.equal(r.dia, null);
+    assert.equal((await s.web()).dias[lunes], undefined);   // vuelve a lo normal: cerrado
+  } finally { await s.cerrar(); }
 });

@@ -110,7 +110,6 @@
       const ev = estado.contenido.eventos[k];
       const foto = fotoDeCelda(k);
       const cls = ["adm-celda", abierto(k) ? "abierto" : "cerrado"];
-      if (estado.contenido.dias[k]) cls.push("cambiado");
       if (ev) cls.push("con-evento");
       if (foto) cls.push("con-foto");
       if (k === hoy) cls.push("hoy");
@@ -184,9 +183,7 @@
   function pintarEstado(k) {
     const actual = abierto(k) ? "abierto" : "cerrado";
     document.querySelectorAll('input[name="estado"]').forEach((r) => { r.checked = r.value === actual; });
-    $("#dia-defecto").textContent = estado.contenido.dias[k]
-      ? `Cambiado en el panel: normalmente ese día está ${abiertoPorDefecto(k) ? "abierto" : "cerrado"}.`
-      : `Horario habitual: ${abiertoPorDefecto(k) ? "abierto (miércoles a sábado)" : "cerrado"}.`;
+    $("#dia-defecto").textContent = `Horario habitual: ${abiertoPorDefecto(k) ? "abierto (miércoles a sábado)" : "cerrado"}.`;
   }
 
   async function cambiarEstado(valor) {
@@ -306,10 +303,12 @@
     confirmarBorrado = null;
     boton.querySelector(".btn-label").textContent = "Quitar evento";
     try {
-      await api(`/api/admin/evento/${estado.dia}`, { method: "DELETE" });
+      const j = await api(`/api/admin/evento/${estado.dia}`, { method: "DELETE" });
       delete estado.contenido.eventos[estado.dia];
+      // El día queda cerrado (el servidor lo marca así al quitar el evento)
+      if (j.dia) estado.contenido.dias[estado.dia] = j.dia; else delete estado.contenido.dias[estado.dia];
       abrirDia(estado.dia);
-      aviso(msg, "Evento quitado. La foto se ha mandado a la papelera de Drive.");
+      aviso(msg, "Evento quitado: el día queda cerrado. Si quieres abrirlo igualmente, marca «Abierto».");
     } catch (e) {
       if (e.message !== "sesion") aviso(msg, e.message, "error");
     }

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css?v=17">
-  <link rel="stylesheet" href="css/admin.css?v=4">
+  <link rel="stylesheet" href="css/admin.css?v=5">
 </head>
 <body class="admin">
 
@@ -38,6 +38,21 @@
 
   <!-- ============ PANEL ============ -->
   <main class="container admin-main" id="panel" hidden>
+    <!-- Estilo de la web según la época del año -->
+    <section class="admin-card adm-tema" aria-labelledby="tema-titulo">
+      <div class="adm-tema-txt">
+        <p class="eyebrow" id="tema-titulo">Estilo de la web</p>
+        <p class="admin-hint">Decoración según la época del año. La web cambia al recargarla.</p>
+      </div>
+      <div class="adm-temas" role="group" aria-labelledby="tema-titulo">
+        <button type="button" class="adm-tema-btn" data-tema="verano" aria-pressed="false"><span aria-hidden="true">☀️</span> Verano</button>
+        <button type="button" class="adm-tema-btn" data-tema="navidad" aria-pressed="false"><span aria-hidden="true">🎄</span> Navidad</button>
+        <button type="button" class="adm-tema-btn" data-tema="halloween" aria-pressed="false"><span aria-hidden="true">🎃</span> Halloween</button>
+        <button type="button" class="adm-tema-btn" data-tema="carnaval" aria-pressed="false"><span aria-hidden="true">🎭</span> Carnaval</button>
+      </div>
+      <p class="adm-aviso" id="tema-msg" role="status" hidden></p>
+    </section>
+
     <nav class="adm-pestanas" role="tablist" aria-label="Secciones del panel">
       <button class="adm-pestana" type="button" role="tab" id="tab-calendario" aria-controls="sec-calendario" aria-selected="true">Eventos y calendario</button>
       <button class="adm-pestana" type="button" role="tab" id="tab-galeria" aria-controls="sec-galeria" aria-selected="false">Galería</button>
@@ -144,6 +159,6 @@
   </main>
 
   <script src="data/config.js"></script>
-  <script src="js/admin.js?v=4"></script>
+  <script src="js/admin.js?v=5"></script>
 </body>
 </html>

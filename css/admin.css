@@ -272,3 +272,23 @@
 }
 .adm-mini[data-accion="portada"][aria-pressed="true"] { border-color: var(--leaf); color: #04140f; background: var(--leaf); }
 .adm-mini[data-accion="anclar"][aria-pressed="true"] { border-color: var(--neon); color: #fff; background: var(--neon); }
+
+/* Estilo de la web según la época */
+.adm-tema { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.adm-tema .eyebrow { margin-bottom: .2rem; }
+.adm-tema .admin-hint { margin: 0; }
+.adm-tema .adm-aviso { flex-basis: 100%; margin: 0; }
+.adm-temas { display: flex; flex-wrap: wrap; gap: 8px; }
+.adm-tema-btn {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .6rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(5, 16, 13, .55);
+  color: var(--muted);
+  font: inherit; font-weight: 700; font-size: .9rem;
+  cursor: pointer;
+  transition: border-color .2s, color .2s, background .2s;
+}
+.adm-tema-btn:hover, .adm-tema-btn:focus-visible { border-color: var(--neon-soft); color: var(--text); }
+.adm-tema-btn[aria-pressed="true"] { border-color: var(--neon); background: #2a0a26; color: #fff; box-shadow: 0 0 18px -6px rgba(255, 58, 216, .7); }

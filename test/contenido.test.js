@@ -58,7 +58,7 @@ test("contenido: sin sesión no se puede editar y /api/web.js es público", asyn
     const r = await fetch(`${s.base}/api/web.js`);
     assert.equal(r.status, 200);
     assert.match(r.headers.get("content-type"), /javascript/);
-    assert.deepEqual(await s.web(), { eventos: {}, dias: {}, galeria: {} });
+    assert.deepEqual(await s.web(), { eventos: {}, dias: {}, galeria: {}, ajustes: {} });
   } finally { await s.cerrar(); }
 });
 
@@ -170,4 +170,37 @@ test("quitar el evento de un día que normalmente está cerrado no deja ningún 
     assert.equal(r.dia, null);
     assert.equal((await s.web()).dias[lunes], undefined);   // vuelve a lo normal: cerrado
   } finally { await s.cerrar(); }
+});
+
+test("estilo de la web: solo los cuatro de la lista, y la web lo recibe en /api/web.js", async () => {
+  const s = await arrancar();
+  try {
+    assert.deepEqual((await s.web()).ajustes, {});
+    assert.equal((await fetch(`${s.base}/api/admin/tema`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tema: "navidad" }) })).status, 401);
+    assert.equal((await s.enviar("/api/admin/tema", "PUT", { tema: "pascua" })).status, 400);
+    assert.equal((await s.enviar("/api/admin/tema", "PUT", {})).status, 400);
+    for (const tema of ["navidad", "halloween", "carnaval", "verano"]) {
+      const r = await s.enviar("/api/admin/tema", "PUT", { tema });
+      assert.equal(r.status, 200);
+      assert.equal((await s.web()).ajustes.tema, tema);
+    }
+    assert.ok(fs.readFileSync(path.join(s.datos, "contenido.json"), "utf8").includes('"tema": "verano"'));
+  } finally { await s.cerrar(); }
+});
+
+test("si falta la migración 006, guardar el estilo da un mensaje claro", async () => {
+  const { crearContenido } = require("../server/contenido.js");
+  const crearCalendario = require("../js/compartido/calendario.js");
+  const sinAjustes = (seccion) => seccion === "ajustes"
+    ? Promise.reject(new Error('Supabase (guardar contenido de la web): new row for relation "web_contenido" violates check constraint "web_contenido_seccion_check"'))
+    : Promise.resolve();
+  const errorOriginal = console.error;
+  console.error = () => {};
+  try {
+    const c = crearContenido({ almacen: { leerContenido: async () => ({}), guardarContenido: sinAjustes }, cal: crearCalendario({}), drive: { configurado: false } });
+    await c.listo;
+    const r = await c.guardarTema({ tema: "navidad" });
+    assert.equal(r.status, 503);
+    assert.match(r.cuerpo.error, /006_tema_web\.sql/);
+  } finally { console.error = errorOriginal; }
 });

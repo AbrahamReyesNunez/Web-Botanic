@@ -65,13 +65,35 @@
 
   async function mostrarPanel() {
     const j = await api("/api/admin/contenido");
-    estado.contenido = { eventos: j.eventos || {}, dias: j.dias || {}, galeria: j.galeria || {} };
+    estado.contenido = { eventos: j.eventos || {}, dias: j.dias || {}, galeria: j.galeria || {}, ajustes: j.ajustes || {} };
     estado.driveConfigurado = !!j.driveConfigurado;
     $("#acceso").hidden = true;
     $("#panel").hidden = false;
     $("#salir").hidden = false;
     if (!estado.mes) { const hoy = new Date(); estado.mes = new Date(hoy.getFullYear(), hoy.getMonth(), 1); }
+    pintarTema();
     pintarMes();
+  }
+
+  /* ---------- Estilo de la web según la época ---------- */
+  const NOMBRES_TEMA = { verano: "Verano", navidad: "Navidad", halloween: "Halloween", carnaval: "Carnaval" };
+
+  function pintarTema() {
+    const actual = estado.contenido.ajustes.tema || "verano";
+    document.querySelectorAll(".adm-tema-btn").forEach((b) => b.setAttribute("aria-pressed", b.dataset.tema === actual ? "true" : "false"));
+  }
+
+  async function cambiarTema(tema) {
+    const msg = $("#tema-msg");
+    if (tema === (estado.contenido.ajustes.tema || "verano")) return;
+    try {
+      await enviarJSON("/api/admin/tema", "PUT", { tema });
+      estado.contenido.ajustes = { ...estado.contenido.ajustes, tema };
+      pintarTema();
+      aviso(msg, `Estilo cambiado a ${NOMBRES_TEMA[tema]}. Recarga la web para verlo.`);
+    } catch (e) {
+      if (e.message !== "sesion") aviso(msg, e.message, "error");
+    }
   }
 
   /* ---------- Pestañas ---------- */
@@ -474,6 +496,7 @@
       await fetch("/api/admin/logout", { method: "POST" }).catch(() => {});
       mostrarAcceso();
     });
+    document.querySelectorAll(".adm-tema-btn").forEach((b) => b.addEventListener("click", () => cambiarTema(b.dataset.tema)));
 
     document.querySelectorAll(".adm-pestana").forEach((b) => b.addEventListener("click", () => elegirPestana(b.id)));
     $("#mes-anterior").addEventListener("click", () => moverMes(-1));

@@ -10,12 +10,16 @@
   <meta property="og:description" content="De miércoles a sábado. Agenda, lista y reservados.">
   <meta property="og:image" content="img/brand/botanic.jpg">
   <link rel="icon" href="img/brand/botanic.jpg">
-  <script src="js/arranque.js"></script>
+  <!-- Eventos, días, galería y estilo de la época editados desde el panel (lo genera el servidor).
+       Va aquí para que arranque.js ponga el estilo antes de pintar la página -->
+  <script src="api/web.js"></script>
+  <script src="js/arranque.js?v=2"></script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css?v=17">
+  <link rel="stylesheet" href="css/temas.css?v=2">
 </head>
 <body>
 
@@ -237,12 +241,11 @@
 
   <script src="data/config.js"></script>
   <script src="data/eventos.js"></script>
-  <!-- Eventos, días y ajustes de la galería editados desde el panel (lo genera el servidor) -->
-  <script src="api/web.js"></script>
   <script src="data/reservados.js"></script>
   <script src="js/compartido/calendario.js"></script>
   <script src="js/compartido/nombre.js"></script>
   <script src="js/compartido/reservas.js"></script>
   <script src="js/app.js?v=16"></script>
+  <script src="js/temas.js?v=2"></script>
 </body>
 </html>

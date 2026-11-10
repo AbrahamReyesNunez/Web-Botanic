@@ -268,6 +268,11 @@ function crearServidor(opciones = {}) {
         if (datos === null) return;
         return responder(res, await contenido.guardarAlbum(albumMatch[1], datos));
       }
+      if (m === "PUT" && ruta === "/api/admin/tema") {
+        const datos = await leerJSON(req, res);
+        if (datos === null) return;
+        return responder(res, await contenido.guardarTema(datos));
+      }
 
       // ---------- Lista, RPPs y reservados (sin panel por ahora; la API se mantiene para la app) ----------
       if (m === "GET" && ruta === "/api/admin/noches") return enviar(res, 200, { ok: true, ...(await admin.noches()) });

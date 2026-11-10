@@ -190,7 +190,7 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
   /* Contenido de la web que se edita desde el panel: una fila por sección (eventos, dias, galeria) */
   async function leerContenido() {
     const filas = datosDe(await db.from("web_contenido").select("seccion, valor"), "leer contenido de la web");
-    const contenido = { eventos: {}, dias: {}, galeria: {} };
+    const contenido = { eventos: {}, dias: {}, galeria: {}, ajustes: {} };
     for (const f of filas) contenido[f.seccion] = f.valor || {};
     return contenido;
   }

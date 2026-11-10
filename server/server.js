@@ -17,9 +17,13 @@ const { crearAlmacen } = require("./almacen.js");
 const { crearAlmacenSupabase } = require("./almacen-supabase.js");
 const { crearLista } = require("./lista.js");
 const { crearAdmin } = require("./admin.js");
+const { crearReservas } = require("./reservas.js");
+const { crearContenido } = require("./contenido.js");
+const { crearDrive } = require("./drive.js");
 
 const RAIZ = path.resolve(__dirname, "..");
-const MAX_CUERPO = 1024;
+const MAX_CUERPO = 8192;
+const MAX_FOTO = 6 * 1024 * 1024; // fotos de eventos (el panel ya las reduce antes de subirlas)
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -31,7 +35,7 @@ const MIME = {
 };
 
 /* Rutas que nunca se sirven como archivos */
-const PRIVADO = /^\/(server|test|node_modules|supabase|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md|actualizar-galeria\.ps1)$|(^|\/)\./;
+const PRIVADO = /^\/(server|test|node_modules|supabase|google-apps-script|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md)$|(^|\/)\./;
 
 const CABECERAS_SEGURIDAD = {
   "Content-Security-Policy": [
@@ -39,9 +43,10 @@ const CABECERAS_SEGURIDAD = {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
-    "img-src 'self' data:",
+    // Galería: miniaturas de Google Drive y álbumes desde el Google Apps Script (data/config.js)
+    "img-src 'self' data: https://drive.google.com https://lh3.googleusercontent.com",
     "frame-src https://www.google.com",
-    "connect-src 'self'",
+    "connect-src 'self' https://script.google.com https://script.googleusercontent.com",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'"
@@ -79,12 +84,17 @@ function cargarEnv() {
 
 function crearServidor(opciones = {}) {
   const cfg = leerConfig();
-  const cal = crearCalendario(cfg, opciones.ahora || ahoraMadrid);
+  let contenido = null;
+  // Los días cerrados o abiertos desde el panel mandan sobre data/config.js
+  const cal = crearCalendario(cfg, opciones.ahora || ahoraMadrid, () => (contenido ? contenido.dias() : {}));
   const almacen = opciones.supabase
     ? crearAlmacenSupabase(opciones.supabase)
     : crearAlmacen(opciones.datos || path.join(RAIZ, "data", "db"));
   const lista = crearLista({ almacen, cal, cfg, secreto: opciones.secreto || crypto.randomBytes(32), ...opciones.lista });
   const admin = crearAdmin({ almacen, cal, claveAdmin: opciones.claveAdmin });
+  const reservas = crearReservas({ almacen, cal, validarToken: lista.validarToken });
+  const drive = opciones.drive || crearDrive({ url: (cfg.galeria || {}).scriptUrl, clave: opciones.driveClave });
+  contenido = crearContenido({ almacen, cal, drive });
   const trustProxy = !!opciones.trustProxy;
 
   const ipDe = (req) => (trustProxy && String(req.headers["x-forwarded-for"] || "").split(",")[0].trim()) || req.socket.remoteAddress || "?";
@@ -129,6 +139,33 @@ function crearServidor(opciones = {}) {
     });
   }
 
+  /* Lee el cuerpo binario de una foto. Devuelve null y responde si algo falla. */
+  function leerFoto(req, res) {
+    return new Promise((resolve) => {
+      if (!/^image\/(jpeg|png|webp)\b/i.test(req.headers["content-type"] || "")) {
+        enviar(res, 415, { ok: false, error: "La foto debe ser JPG, PNG o WebP." });
+        return resolve(null);
+      }
+      const trozos = [];
+      let tam = 0;
+      let cortado = false;
+      req.on("data", (c) => {
+        if (cortado) return;
+        tam += c.length;
+        if (tam > MAX_FOTO) {
+          cortado = true;
+          enviar(res, 413, { ok: false, error: "La foto es demasiado grande (máximo 6 MB)." });
+          req.destroy();
+          resolve(null);
+          return;
+        }
+        trozos.push(c);
+      });
+      req.on("end", () => { if (!cortado) resolve(Buffer.concat(trozos)); });
+      req.on("error", () => resolve(null));
+    });
+  }
+
   /* Página 404 del sitio (las rutas /api/ siguen respondiendo JSON) */
   function noEncontrado(req, res) {
     fs.readFile(path.join(RAIZ, "404.html"), (err, html) => {
@@ -162,6 +199,12 @@ function crearServidor(opciones = {}) {
   async function api(req, res, ruta, url) {
     const m = req.method;
 
+    // Contenido editable de la web (eventos, días y galería) como script: se carga antes que app.js
+    if (m === "GET" && ruta === "/api/web.js") {
+      res.writeHead(200, { ...CABECERAS_SEGURIDAD, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-cache" });
+      return res.end(contenido.script());
+    }
+
     if (m === "GET" && ruta === "/api/form-token") return enviar(res, 200, { ok: true, token: lista.crearToken() });
 
     const rppMatch = ruta.match(/^\/api\/rpp\/([a-z0-9]{4,32})$/);
@@ -175,6 +218,11 @@ function crearServidor(opciones = {}) {
       if (datos === null) return;
       return responder(res, await lista.inscribir(datos, ipDe(req)));
     }
+    if (m === "POST" && ruta === "/api/reservas") {
+      const datos = await leerJSON(req, res);
+      if (datos === null) return;
+      return responder(res, await reservas.crear(datos, ipDe(req)));
+    }
 
     if (m === "POST" && ruta === "/api/admin/login") {
       const datos = await leerJSON(req, res);
@@ -185,9 +233,50 @@ function crearServidor(opciones = {}) {
     if (ruta.startsWith("/api/admin/")) {
       if (!admin.autorizado(req)) return enviar(res, 401, { ok: false, error: "Sesión no iniciada." });
       if (m === "POST" && ruta === "/api/admin/logout") return responder(res, admin.logout(req));
+      // ---------- Contenido de la web ----------
+      if (m === "GET" && ruta === "/api/admin/contenido") return enviar(res, 200, { ok: true, ...contenido.todo(), driveConfigurado: drive.configurado });
+      if (m === "POST" && ruta === "/api/admin/foto") {
+        const foto = await leerFoto(req, res);
+        if (foto === null) return;
+        return responder(res, await contenido.subirFoto(foto));
+      }
+      const eventoMatch = ruta.match(/^\/api\/admin\/evento\/(\d{4}-\d{2}-\d{2})$/);
+      if (eventoMatch && m === "PUT") {
+        const datos = await leerJSON(req, res);
+        if (datos === null) return;
+        return responder(res, await contenido.guardarEvento(eventoMatch[1], datos));
+      }
+      if (eventoMatch && m === "DELETE") return responder(res, await contenido.borrarEvento(eventoMatch[1]));
+      const diaMatch = ruta.match(/^\/api\/admin\/dia\/(\d{4}-\d{2}-\d{2})$/);
+      if (diaMatch && m === "PUT") {
+        const datos = await leerJSON(req, res);
+        if (datos === null) return;
+        return responder(res, await contenido.guardarDia(diaMatch[1], datos));
+      }
+      const albumMatch = ruta.match(/^\/api\/admin\/album\/([A-Za-z0-9_-]{10,100})$/);
+      if (albumMatch && m === "PUT") {
+        const datos = await leerJSON(req, res);
+        if (datos === null) return;
+        return responder(res, await contenido.guardarAlbum(albumMatch[1], datos));
+      }
+
+      // ---------- Lista, RPPs y reservados (sin panel por ahora; la API se mantiene para la app) ----------
       if (m === "GET" && ruta === "/api/admin/noches") return enviar(res, 200, { ok: true, ...(await admin.noches()) });
       if (m === "GET" && ruta === "/api/admin/resumen") return responder(res, await admin.resumen(url.searchParams.get("fecha")));
+      if (m === "GET" && ruta === "/api/admin/reservas") return responder(res, await admin.reservas(url.searchParams.get("fecha")));
       if (m === "GET" && ruta === "/api/admin/rpps") return responder(res, await admin.rpps());
+      if (m === "POST" && ruta === "/api/admin/rpps") {
+        const datos = await leerJSON(req, res);
+        if (datos === null) return;
+        return responder(res, await admin.crearRpp(datos));
+      }
+      const rppAdminMatch = ruta.match(/^\/api\/admin\/rpp\/([a-z0-9]{4,32})$/);
+      if (m === "PATCH" && rppAdminMatch) {
+        const datos = await leerJSON(req, res);
+        if (datos === null) return;
+        return responder(res, await admin.actualizarRpp(rppAdminMatch[1], datos));
+      }
+      if (m === "DELETE" && rppAdminMatch) return responder(res, await admin.eliminarRpp(rppAdminMatch[1]));
       if (m === "GET" && ruta === "/api/admin/export.csv") {
         const fecha = url.searchParams.get("fecha");
         const texto = await admin.csv(fecha);
@@ -220,8 +309,9 @@ function crearServidor(opciones = {}) {
     }
   });
 
-  servidor.on("close", () => { lista.cerrar(); admin.cerrar(); });
+  servidor.on("close", () => { lista.cerrar(); admin.cerrar(); reservas.cerrar(); });
   servidor.almacen = almacen;
+  servidor.listo = contenido.listo;
   return servidor;
 }
 
@@ -241,13 +331,16 @@ if (require.main === module) {
   }
   const supabase = SUPABASE_URL ? { url: SUPABASE_URL, clave: SUPABASE_SECRET_KEY } : null;
   const puerto = Number(process.env.PORT) || 3000;
-  crearServidor({
+  const servidor = crearServidor({
     claveAdmin,
     supabase,
     secreto: process.env.FORM_SECRET || undefined,
+    driveClave: process.env.DRIVE_SCRIPT_CLAVE || undefined,
     trustProxy: process.env.TRUST_PROXY === "1"
-  }).listen(puerto, () => {
+  });
+  servidor.listo.then(() => servidor.listen(puerto, () => {
     console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html`);
     console.log(supabase ? "  Datos: Supabase" : "  Datos: data/db (JSON). Para usar Supabase, define SUPABASE_URL y SUPABASE_SECRET_KEY.");
-  });
+    if (!process.env.DRIVE_SCRIPT_CLAVE) console.log("  Sin DRIVE_SCRIPT_CLAVE: el panel no podrá subir fotos de eventos a Drive (ver .env.example).");
+  }));
 }

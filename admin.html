@@ -4,20 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Panel de lista · Botanic</title>
+  <title>Panel de la web · Botanic</title>
   <meta name="theme-color" content="#06120f">
   <link rel="icon" href="img/brand/botanic.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=15">
-  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/styles.css?v=16">
+  <link rel="stylesheet" href="css/admin.css?v=3">
 </head>
 <body class="admin">
 
   <header class="admin-bar">
     <a href="./" class="brand">B<span class="o-slash">Ø</span>TANIC</a>
-    <span class="admin-tag">Panel de lista</span>
+    <span class="admin-tag">Panel de la web</span>
+    <a class="admin-ver" href="./" target="_blank" rel="noopener">Ver web ↗</a>
     <button class="btn btn-ghost btn-sm" id="salir" hidden><span class="btn-label">Salir</span><span class="btn-arrow" aria-hidden="true">→</span></button>
   </header>
 
@@ -37,44 +38,113 @@
 
   <!-- ============ PANEL ============ -->
   <main class="container admin-main" id="panel" hidden>
-    <section class="admin-toolbar">
-      <div class="field">
-        <label for="noche">Noche</label>
-        <select id="noche"></select>
-      </div>
-      <a class="btn btn-ghost btn-sm" id="exportar"><span class="btn-label">Exportar CSV</span><span class="btn-arrow" aria-hidden="true">↓</span></a>
-    </section>
+    <nav class="adm-pestanas" role="tablist" aria-label="Secciones del panel">
+      <button class="adm-pestana" type="button" role="tab" id="tab-calendario" aria-controls="sec-calendario" aria-selected="true">Eventos y calendario</button>
+      <button class="adm-pestana" type="button" role="tab" id="tab-galeria" aria-controls="sec-galeria" aria-selected="false">Galería</button>
+    </nav>
 
-    <section class="admin-card">
-      <p class="eyebrow">Inscritos</p>
-      <p class="admin-total"><span id="total">0</span> <small id="total-fecha"></small></p>
-      <div class="rpp-stats" id="rpp-stats"></div>
-    </section>
-
-    <section class="admin-card">
-      <div class="admin-card-head">
-        <p class="eyebrow">Lista de la noche</p>
-        <div class="field admin-search">
-          <label for="buscar" class="sr-only">Buscar</label>
-          <input id="buscar" type="search" placeholder="Buscar nombre o RPP" autocomplete="off">
+    <!-- ---------- Eventos y calendario ---------- -->
+    <section class="adm-seccion" id="sec-calendario" role="tabpanel" aria-labelledby="tab-calendario">
+      <div class="admin-card">
+        <div class="adm-mes-cab">
+          <button class="adm-flecha" type="button" id="mes-anterior" aria-label="Mes anterior">‹</button>
+          <h2 class="adm-mes-titulo" id="mes-titulo" aria-live="polite"></h2>
+          <button class="adm-flecha" type="button" id="mes-siguiente" aria-label="Mes siguiente">›</button>
         </div>
+        <div class="adm-leyenda">
+          <span><i class="adm-punto abierto"></i>Abierto</span>
+          <span><i class="adm-punto cerrado"></i>Cerrado</span>
+          <span><i class="adm-punto cambiado"></i>Cambiado en el panel</span>
+          <span><i class="adm-punto evento"></i>Con evento</span>
+        </div>
+        <div class="adm-semana" aria-hidden="true"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+        <div class="adm-mes" id="mes" role="grid" aria-labelledby="mes-titulo"></div>
       </div>
-      <div class="table-wrap">
-        <table class="admin-table">
-          <thead><tr><th>Hora</th><th>Nombre</th><th>RPP</th><th><span class="sr-only">Acciones</span></th></tr></thead>
-          <tbody id="filas"></tbody>
-        </table>
+
+      <!-- Editor del día elegido -->
+      <div class="admin-card adm-dia" id="dia" hidden>
+        <div class="admin-card-head">
+          <div>
+            <p class="eyebrow">Día seleccionado</p>
+            <h2 class="adm-dia-titulo" id="dia-titulo" tabindex="-1"></h2>
+          </div>
+        </div>
+
+        <fieldset class="adm-estado">
+          <legend>¿Abre ese día?</legend>
+          <p class="admin-hint" id="dia-defecto"></p>
+          <div class="adm-estado-ops">
+            <label><input type="radio" name="estado" value="abierto"> Abierto</label>
+            <label><input type="radio" name="estado" value="cerrado"> Cerrado</label>
+          </div>
+          <p class="adm-aviso" id="estado-msg" role="status" hidden></p>
+        </fieldset>
+
+        <form class="adm-evento" id="evento-form" novalidate>
+          <h3 class="adm-sub">Evento</h3>
+          <p class="admin-hint" id="evento-hint"></p>
+          <div class="adm-evento-grid">
+            <div class="adm-foto">
+              <div class="adm-foto-marco" id="foto-marco">
+                <img id="foto-preview" alt="" referrerpolicy="no-referrer" hidden>
+                <span class="adm-foto-vacia" id="foto-vacia">Sin foto</span>
+              </div>
+              <label class="btn btn-ghost btn-sm adm-foto-btn" id="foto-elegir">
+                <span class="btn-label">Elegir foto</span>
+                <input type="file" id="foto-input" accept="image/jpeg,image/png,image/webp" hidden>
+              </label>
+              <button class="adm-enlace" type="button" id="foto-quitar" hidden>Quitar foto</button>
+              <p class="adm-aviso" id="foto-msg" hidden></p>
+            </div>
+            <div class="adm-campos">
+              <div class="field">
+                <label for="ev-titulo">Nombre del evento *</label>
+                <input id="ev-titulo" maxlength="80" required autocomplete="off" placeholder="Ej: Noche Tropical">
+              </div>
+              <div class="field">
+                <label for="ev-dj">DJ invitado</label>
+                <input id="ev-dj" maxlength="120" autocomplete="off" placeholder="Ej: DJ Nombre">
+              </div>
+              <div class="field">
+                <label for="ev-descripcion">Descripción</label>
+                <textarea id="ev-descripcion" maxlength="500" rows="3" placeholder="Opcional"></textarea>
+              </div>
+              <div class="field">
+                <label for="ev-instagram">Publicación de Instagram</label>
+                <input id="ev-instagram" type="url" maxlength="250" autocomplete="off" placeholder="https://www.instagram.com/p/…">
+              </div>
+            </div>
+          </div>
+          <div class="adm-acciones">
+            <button class="btn btn-neon btn-sm" type="submit" id="evento-guardar"><span class="btn-label">Guardar evento</span><span class="btn-arrow" aria-hidden="true">✓</span></button>
+            <button class="btn btn-ghost btn-sm adm-peligro" type="button" id="evento-borrar" hidden><span class="btn-label">Quitar evento</span></button>
+          </div>
+          <p class="adm-aviso" id="evento-msg" role="status" hidden></p>
+        </form>
       </div>
-      <p class="admin-empty" id="vacio" hidden>Todavía no hay nadie apuntado a esta noche.</p>
     </section>
 
-    <section class="admin-card">
-      <p class="eyebrow">Links de RPP</p>
-      <p class="admin-hint">Cada RPP tiene dos links: el de <strong>Lista</strong> asigna a ese RPP a quien se apunta desde él y el de <strong>Reservados</strong> abre la web en reservados y le asigna las reservas. Los RPP se gestionan en <code>data/db/rpps.json</code>.</p>
-      <ul class="rpp-links" id="rpp-links"></ul>
+    <!-- ---------- Galería ---------- -->
+    <section class="adm-seccion" id="sec-galeria" role="tabpanel" aria-labelledby="tab-galeria" hidden>
+      <div class="admin-card">
+        <p class="eyebrow">Galería</p>
+        <p class="admin-hint">Los álbumes son las carpetas de Google Drive. Aquí puedes cambiar el nombre que se ve en la web, elegir la portada y anclar álbumes o fotos para que salgan primero. En Drive no se cambia nada.</p>
+        <div class="gal-estado" id="adm-gal-cargando" role="status">
+          <span class="gal-spinner" aria-hidden="true"></span>
+          <p>Cargando álbumes de Drive…</p>
+          <p class="gal-estado-nota">Puede tardar unos segundos.</p>
+        </div>
+        <div class="gal-estado gal-error" id="adm-gal-error" role="alert" hidden>
+          <p class="gal-estado-titulo">No se han podido cargar los álbumes</p>
+          <p class="gal-estado-nota" id="adm-gal-error-detalle"></p>
+          <button class="btn btn-ghost btn-sm" type="button" id="adm-gal-reintentar"><span class="btn-label">Reintentar</span></button>
+        </div>
+        <div class="adm-albumes" id="adm-albumes"></div>
+      </div>
     </section>
   </main>
 
-  <script src="js/admin.js"></script>
+  <script src="data/config.js"></script>
+  <script src="js/admin.js?v=3"></script>
 </body>
 </html>

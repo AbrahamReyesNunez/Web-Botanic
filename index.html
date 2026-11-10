@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=15">
+  <link rel="stylesheet" href="css/styles.css?v=16">
 </head>
 <body>
 
@@ -110,16 +110,24 @@
       <header class="section-head" data-reveal>
         <p class="eyebrow">Galería</p>
         <h2 class="section-title">Así se vive <span class="outline">Botanic</span></h2>
-        <p class="section-lead">Las fotos de cada noche. Búscate.</p>
+        <p class="section-lead">Las fotos de cada noche. Entra en un álbum, búscate y descárgate las tuyas.</p>
       </header>
-      <div class="gal-filters" id="gal-filters" role="tablist" aria-label="Filtrar por noche" data-reveal></div>
-      <div class="gal-grid" id="gal-grid"></div>
-      <div class="gal-empty" id="gal-empty" data-reveal hidden>
+      <!-- Mientras responde el script de Google Drive (tarda unos segundos) -->
+      <div class="gal-estado" id="gal-cargando" role="status">
+        <span class="gal-spinner" aria-hidden="true"></span>
+        <p>Cargando álbumes…</p>
+        <p class="gal-estado-nota">Puede tardar unos segundos.</p>
+      </div>
+      <div class="gal-estado gal-error" id="gal-error" role="alert" hidden>
+        <p class="gal-estado-titulo">No hemos podido cargar las fotos</p>
+        <p class="gal-estado-nota" id="gal-error-detalle"></p>
+        <button class="btn btn-ghost" id="gal-reintentar" type="button"><span class="btn-label">Reintentar</span><span class="btn-arrow" aria-hidden="true">↻</span></button>
+      </div>
+      <!-- Álbumes (tarjetas) o fotos del álbum abierto (#album=Nombre) -->
+      <div id="gal-vista"></div>
+      <div class="gal-empty" id="gal-empty" hidden>
         <p>Muy pronto las fotos de nuestras noches.</p>
         <a class="btn btn-ghost" id="gal-ig" target="_blank" rel="noopener"><span class="btn-label">Síguenos en Instagram</span><span class="btn-arrow" aria-hidden="true">↗</span></a>
-      </div>
-      <div class="gal-more" id="gal-more" hidden>
-        <button class="btn btn-ghost" id="gal-more-btn"><span class="btn-label">Ver más fotos</span><span class="btn-arrow" aria-hidden="true">↓</span></button>
       </div>
     </div>
   </section>
@@ -207,9 +215,11 @@
   <!-- ============ VISOR DE FOTOS ============ -->
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Visor de fotos" hidden>
     <button class="lb-close" id="lb-close" aria-label="Cerrar">&times;</button>
+    <a class="lb-download" id="lb-download" href="#" rel="noopener" aria-label="Descargar foto" title="Descargar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></a>
     <button class="lb-nav lb-prev" id="lb-prev" aria-label="Foto anterior">&#8249;</button>
     <figure class="lb-figure">
-      <img id="lb-img" alt="">
+      <span class="gal-spinner lb-spinner" aria-hidden="true"></span>
+      <img id="lb-img" alt="" referrerpolicy="no-referrer">
       <figcaption id="lb-caption"></figcaption>
     </figure>
     <button class="lb-nav lb-next" id="lb-next" aria-label="Foto siguiente">&#8250;</button>
@@ -227,11 +237,12 @@
 
   <script src="data/config.js"></script>
   <script src="data/eventos.js"></script>
-  <script src="data/galeria.js"></script>
+  <!-- Eventos, días y ajustes de la galería editados desde el panel (lo genera el servidor) -->
+  <script src="api/web.js"></script>
   <script src="data/reservados.js"></script>
   <script src="js/compartido/calendario.js"></script>
   <script src="js/compartido/nombre.js"></script>
   <script src="js/compartido/reservas.js"></script>
-  <script src="js/app.js?v=13"></script>
+  <script src="js/app.js?v=14"></script>
 </body>
 </html>

@@ -48,6 +48,10 @@ const guardadas = (s) => {
   const f = path.join(s.datos, "inscripciones.json");
   return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : [];
 };
+const reservasGuardadas = (s) => {
+  const f = path.join(s.datos, "reservas.json");
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : [];
+};
 
 test("inscripción sin RPP y con RPP del link", async () => {
   const s = await arrancar();
@@ -114,7 +118,7 @@ test("peticiones malformadas o enormes", async () => {
   const s = await arrancar();
   try {
     const post = (body, tipo = "application/json") => fetch(`${s.base}/api/lista`, { method: "POST", headers: { "Content-Type": tipo }, body });
-    assert.equal((await post("x".repeat(5000))).status, 413);
+    assert.equal((await post("x".repeat(10_000))).status, 413);
     assert.equal((await post("{no es json")).status, 400);
     assert.equal((await post("nombre=Juan", "application/x-www-form-urlencoded")).status, 415);
     assert.equal((await inscribir(s.base, { nombre: "Ana Ruiz", telefono: "600000000" })).status, 400);
@@ -162,6 +166,7 @@ test("panel admin: acceso, recuento, CSV y borrado", async () => {
     assert.equal(res.total, 3);
     const porNombre = Object.fromEntries(res.porRpp.map((g) => [g.nombre, g.total]));
     assert.deepEqual(porNombre, { "Prueba 1": 2, "Prueba 2": 0, "Inactivo": 0, "Sin RPP": 1 });
+    assert.equal(res.inscripciones[0].rppCodigo, "aaaa1111");
 
     const csv = await (await fetch(`${s.base}/api/admin/export.csv?fecha=${NOCHE}`, h)).text();
     assert.match(csv, /Ana Ruiz;Prueba 1/);
@@ -170,6 +175,109 @@ test("panel admin: acceso, recuento, CSV y borrado", async () => {
     assert.equal((await fetch(`${s.base}/api/admin/inscripcion/${id}`, { method: "DELETE", ...h })).status, 200);
     const res2 = await (await fetch(`${s.base}/api/admin/resumen?fecha=${NOCHE}`, h)).json();
     assert.equal(res2.total, 2);
+  } finally { await s.cerrar(); }
+});
+
+test("panel admin: crea, edita, desactiva y reactiva RPPs con enlaces estables", async () => {
+  const s = await arrancar();
+  try {
+    const login = await fetch(`${s.base}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave: "clave-de-prueba" })
+    });
+    const h = { headers: { Cookie: login.headers.get("set-cookie").split(";")[0] } };
+    const enviar = (url, method, body) => fetch(`${s.base}${url}`, {
+      method,
+      ...h,
+      headers: { ...h.headers, ...(body ? { "Content-Type": "application/json" } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+
+    assert.equal((await enviar("/api/admin/rpps", "POST", { nombre: "   " })).status, 400);
+    const alta = await enviar("/api/admin/rpps", "POST", { nombre: "RPP nuevo" });
+    assert.equal(alta.status, 201);
+    const { rpp } = await alta.json();
+    assert.match(rpp.codigo, /^[a-f0-9]{8}$/);   // mismo formato que nuevo_codigo_rpp() en Supabase
+    assert.equal(rpp.nombre, "RPP nuevo");
+    assert.equal((await fetch(`${s.base}/api/rpp/${rpp.codigo}`)).status, 200);
+
+    const edicion = await enviar(`/api/admin/rpp/${rpp.codigo}`, "PATCH", { nombre: "RPP editado" });
+    assert.equal(edicion.status, 200);
+    assert.equal((await edicion.json()).rpp.nombre, "RPP editado");
+    assert.equal((await enviar(`/api/admin/rpp/${rpp.codigo}`, "DELETE")).status, 200);
+    assert.equal((await fetch(`${s.base}/api/rpp/${rpp.codigo}`)).status, 404);
+    const listado = await (await enviar("/api/admin/rpps", "GET")).json();
+    assert.deepEqual(listado.rpps.find((x) => x.codigo === rpp.codigo), {
+      codigo: rpp.codigo,
+      nombre: "RPP editado",
+      activo: false
+    });
+
+    assert.equal((await enviar(`/api/admin/rpp/${rpp.codigo}`, "PATCH", { activo: true })).status, 200);
+    assert.equal((await fetch(`${s.base}/api/rpp/${rpp.codigo}`)).status, 200);
+  } finally { await s.cerrar(); }
+});
+
+test("reservas: guarda pista y VIP y el panel cuenta mesas y exporta bebidas", async () => {
+  const s = await arrancar();
+  try {
+    const crear = async (datos) => fetch(`${s.base}/api/reservas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...datos, token: await token(s.base) })
+    });
+    const base = {
+      fecha: NOCHE,
+      nombre: "Ana Ruiz",
+      telefono: "671 434 657",
+      personas: 4,
+      rpp: "aaaa1111",
+      refrescos: [{ nombre: "Coca-Cola", cantidad: 10 }],
+      chupitos: [],
+      champan: [],
+      notas: ""
+    };
+    const pista = await crear({ ...base, tipo: "pista", botellas: [{ nombre: "Ron Barceló", cantidad: 1 }] });
+    assert.equal(pista.status, 201);
+    const vip = await crear({
+      ...base,
+      nombre: "Luis Mora",
+      tipo: "vip",
+      botellas: [{ nombre: "Ron Brugal", cantidad: 2 }],
+      refrescos: [{ nombre: "Sprite", cantidad: 20 }]
+    });
+    assert.equal(vip.status, 201);
+
+    await s.servidor.almacen.esperar();
+    assert.equal(reservasGuardadas(s).length, 2);
+    assert.equal(reservasGuardadas(s)[0].total, 50);
+    assert.equal(reservasGuardadas(s)[0].estado, "pendiente");
+    // Teléfono en formato internacional, como lo exige la base de datos
+    assert.equal(reservasGuardadas(s)[0].telefono, "+34671434657");
+    assert.equal((await crear({ ...base, tipo: "pista", telefono: "12345", botellas: [{ nombre: "Ron Barceló", cantidad: 1 }] })).status, 400);
+    assert.equal((await crear({ ...base, tipo: "pista", botellas: [{ nombre: "Inventada", cantidad: 1 }] })).status, 400);
+    assert.equal((await fetch(`${s.base}/api/admin/reservas?fecha=${NOCHE}`)).status, 401);
+
+    const login = await fetch(`${s.base}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave: "clave-de-prueba" })
+    });
+    const h = { headers: { Cookie: login.headers.get("set-cookie").split(";")[0] } };
+    const r = await (await fetch(`${s.base}/api/admin/reservas?fecha=${NOCHE}`, h)).json();
+    assert.equal(r.total, 2);
+    assert.equal(r.vip, 1);
+    assert.equal(r.pista, 1);
+    assert.deepEqual(r.reservas.map((x) => x.tipo), ["pista", "vip"]);
+    // Cada bebida con su precio por unidad de esa noche (los refrescos van incluidos: 0 €)
+    assert.deepEqual(r.reservas[0].botellas, [{ nombre: "Ron Barceló", cantidad: 1, precio: 50 }]);
+    assert.deepEqual(r.reservas[0].refrescos, [{ nombre: "Coca-Cola", cantidad: 10, precio: 0 }]);
+    assert.equal(r.reservas[0].estado, "pendiente");
+    assert.equal("telefono" in r.reservas[0], false);
+
+    const noches = await (await fetch(`${s.base}/api/admin/noches`, h)).json();
+    assert.ok(noches.noches.some((n) => n.fecha === NOCHE));
   } finally { await s.cerrar(); }
 });
 
@@ -185,7 +293,7 @@ test("login admin limitado a 5 intentos", async () => {
 test("archivos privados y rutas con ../ no se sirven", async () => {
   const s = await arrancar();
   try {
-    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/schema.sql", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
+    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/migrations/005_web_contenido.sql", "/google-apps-script/Codigo.gs", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
       assert.equal((await fetch(s.base + ruta)).status, 404, ruta);
     }
     const index = await fetch(`${s.base}/`);

@@ -10,7 +10,7 @@ const { crearAlmacen } = require("../server/almacen.js");
 async function conAlmacen(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "botanic-almacen-"));
   const almacen = crearAlmacen(dir);
-  try { await fn(almacen); } finally {
+  try { await fn(almacen, dir); } finally {
     await almacen.esperar();
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -45,5 +45,30 @@ test("recuento por noche y borrado", async () => {
     assert.equal(await a.borrar(inscripcion.id), true);
     assert.equal(await a.borrar(inscripcion.id), false);
     assert.equal((await a.deNoche("2026-10-14")).length, 1);
+  });
+});
+
+test("gestión de RPPs persiste cambios concurrentes y conserva los códigos", async () => {
+  await conAlmacen(async (a, dir) => {
+    const [primero, segundo] = await Promise.all([
+      a.crearRpp({ codigo: "rpp00001", nombre: "Primero" }),
+      a.crearRpp({ codigo: "rpp00002", nombre: "Segundo" })
+    ]);
+    assert.equal(primero.activo, true);
+    assert.equal(segundo.activo, true);
+
+    const editado = await a.actualizarRpp("rpp00001", { nombre: "Nombre editado" });
+    assert.equal(editado.nombre, "Nombre editado");
+    const inactivo = await a.actualizarRpp("rpp00001", { activo: false });
+    assert.equal(inactivo.activo, false);
+    assert.deepEqual((await a.rpps()).map((r) => r.codigo), ["rpp00001", "rpp00002"]);
+    assert.equal(await a.rppActivo("rpp00001"), null);
+    assert.equal((await a.rppActivo("rpp00002")).nombre, "Segundo");
+    await a.esperar();
+    const recargado = crearAlmacen(dir);
+    assert.deepEqual((await recargado.rpps()).map(({ codigo, nombre, activo }) => ({ codigo, nombre, activo })), [
+      { codigo: "rpp00001", nombre: "Nombre editado", activo: false },
+      { codigo: "rpp00002", nombre: "Segundo", activo: true }
+    ]);
   });
 });

@@ -1,6 +1,6 @@
 # Web de Discoteca Botanic Chipiona
 
-Web de la discoteca con agenda, galería, mesas VIP y **lista por RPP**. Un pequeño servidor en Node.js sirve la web y guarda las inscripciones en **Supabase** (o en archivos JSON si no está configurado).
+Web de la discoteca con agenda, galería, mesas VIP y **lista por RPP**. Un pequeño servidor en Node.js sirve la web y guarda las inscripciones y solicitudes de reservados en **Supabase** (o en archivos JSON si no está configurado).
 
 ## Arrancar en local
 
@@ -20,23 +20,26 @@ Si abres `index.html` directamente (sin servidor), la web se ve, pero la lista n
 ## Estructura
 
 ```
-index.html · admin.html          Web pública y panel de la lista
+index.html · admin.html          Web pública y panel de la web (eventos, días y galería)
+admin-lista.html                 Panel anterior de lista, RPPs y reservados (sin enlazar)
 css/styles.css · css/admin.css   Estilos
 js/app.js                        Calendario, lista, galería, efectos
-js/admin.js                      Panel de recuento
+js/admin.js · js/admin-lista.js  Panel de la web · panel anterior
 js/compartido/                   Código que usan la web y el servidor
   calendario.js                  Días de apertura y cierre de lista
   nombre.js                      Filtro y normalización de nombres
 server/                          Servidor (server.js, lista.js, admin.js, limites.js)
+  contenido.js                   Eventos, días y ajustes de galería del panel (/api/web.js)
+  drive.js                       Subida de fotos de eventos a Drive vía Apps Script
   almacen-supabase.js            Datos en Supabase (producción)
   almacen.js                     Datos en JSON (local y pruebas)
   comprobar-supabase.js          npm run comprobar-supabase
-supabase/schema.sql              Tablas y funciones de la base de datos
+supabase/migrations/             Migraciones de la base de datos, en orden (005: tabla del panel de la web)
 data/config.js                   Horarios, contacto, días cerrados, topes de la lista
-data/eventos.js                  Títulos/artistas de noches concretas (opcional)
-data/galeria.js                  Índice de fotos (lo genera el script)
-data/db/                         Solo en modo JSON: rpps.json e inscripciones.json (esta no se sube)
-img/                             Logo, portadas y galería
+data/eventos.js                  Nombre por defecto de cada noche (los eventos se crean en el panel)
+google-apps-script/Codigo.gs     Código del Google Apps Script de la galería (se pega en Apps Script)
+data/db/                         Solo en modo JSON: rpps.json, inscripciones.json, reservas.json y contenido.json
+img/                             Logo y portadas (las fotos de la galería están en Google Drive)
 test/                            Pruebas (node --test)
 ```
 
@@ -46,8 +49,9 @@ test/                            Pruebas (node --test)
   - Con el link de un RPP (`https://dominio/?rpp=CÓDIGO`) abre directamente la lista de la próxima noche y queda fijado en ese RPP, también si la persona navega por la web.
   - Cada RPP tiene además un link de reservados (`https://dominio/?reserva=CÓDIGO`): abre la web en la sección de reservados y la reserva queda asignada a ese RPP. Cada link cuenta solo para lo suyo.
   - Sin link queda en **"Sin RPP"**, así nadie puede asignarse un RPP a mano.
-- **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, con un `codigo` nuevo de 8 letras minúsculas/números aleatorios y su `nombre`. Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
-- **Panel** (`/admin.html`, con la clave de `ADMIN_KEY`): inscritos por noche y por RPP con porcentajes, buscador, borrado de nombres colados, exportación a CSV y los dos links de cada RPP (lista y reservados) para copiar.
+- **Panel anterior** (`/admin-lista.html`, sin enlazar desde ningún sitio): inscritos por noche y por RPP con porcentajes, buscador, borrado de nombres colados, exportación de la lista a PDF agrupada por RPP, y enlaces de lista y reservados para copiar.
+- Desde el panel puedes crear y editar RPPs. Sus códigos y links se generan automáticamente; al eliminarlos se desactivan en vez de borrarlos, para conservar el historial y las inscripciones.
+- El formulario de reservados guarda las solicitudes como `pendiente` hasta que se confirman o rechazan. El panel cuenta las mesas VIP y en pista por noche y permite exportar sus nombres y bebidas a PDF. Los teléfonos y comentarios se guardan para gestionar la solicitud, pero no se incluyen en el panel ni en el PDF.
 - La lista de un día se cierra a las 23:00 de ese día (`cierreListaHora` en `data/config.js`, hora de Madrid).
 
 ### Protección contra abusos
@@ -60,19 +64,47 @@ test/                            Pruebas (node --test)
 | Duplicados y topes | El mismo nombre no puede repetirse en una noche. Topes por noche y por RPP en `data/config.js`. En Supabase se comprueban dentro de la base de datos, así que dos altas simultáneas no se los saltan. |
 | Servidor | Cuerpo máximo de 1 KB, solo JSON y campos conocidos. Cabeceras de seguridad (CSP…). Los archivos internos no se sirven. |
 
+## Panel de la web
+
+`/admin.html`, con la clave de `ADMIN_KEY`. Tiene dos pestañas:
+
+- **Eventos y calendario**: un calendario por meses. Al pulsar un día puedes:
+  - Marcarlo como abierto o cerrado aunque no toque (por ejemplo, abrir en Nochevieja o cerrar un sábado). Si eliges lo que ya tocaba según `data/config.js`, no se guarda ningún cambio. La lista y los reservados respetan estos cambios al momento.
+  - Crear, editar o quitar su evento: nombre, DJ invitado, descripción, enlace de Instagram y foto. La foto se reduce en el navegador y se sube a la carpeta de eventos de Google Drive; al cambiarla o quitar el evento, la anterior va a la papelera de Drive.
+- **Galería**: los álbumes de Drive. Para cada uno puedes cambiar el nombre que se ve en la web, elegir la portada, anclar el álbum (sale el primero) y anclar fotos (salen primero dentro del álbum). En Drive no se cambia nada. "Resetear ajustes" borra todo lo cambiado en ese álbum y lo deja como en Drive.
+
+Lo que se cambia en el panel se guarda en la base de datos (tabla `web_contenido`) y la web lo recibe en `/api/web.js`.
+
+La lista, los RPPs y los reservados ya no tienen panel, pero su API (`/api/admin/...`) y sus datos siguen intactos para la futura app móvil.
+
+### Configurar el Google Apps Script (una vez)
+El panel necesita el id de cada carpeta y poder subir fotos a Drive. El código completo está en `google-apps-script/Codigo.gs`:
+1. Abre tu proyecto de Apps Script, sustituye el código por el de `Codigo.gs` y guarda.
+2. Elige la función `configurarClave` y pulsa **Ejecutar** (acepta los permisos la primera vez). Crea la clave y la carpeta "Botanic · Fotos de eventos" en tu Drive, y escribe en el registro la línea `DRIVE_SCRIPT_CLAVE=…`: cópiala al `.env`.
+3. Implementar → Gestionar implementaciones → Editar → Versión: nueva → Implementar. Así la URL no cambia.
+4. Reinicia el servidor (`npm start`).
+
 ## Base de datos (Supabase)
 
 Supabase es una base de datos PostgreSQL en la nube con un panel web. Solo habla con ella el servidor, con la clave secreta del `.env`: el navegador nunca se conecta directamente, así que todas las protecciones de arriba siguen aplicándose. Las tablas tienen RLS activado y sin permisos para la clave pública.
 
 | Tabla | Contenido |
 |---|---|
-| `rpps` | `codigo` (el del link), `nombre`, `activo` |
+| `rpps` | `codigo` (el del link; lo genera la base de datos), `nombre`, `activo` |
 | `inscripciones` | `fecha` de la noche, `nombre`, `clave` (nombre sin tildes, para duplicados), `rpp`, `creado` |
+| `reservas` | Cabecera de cada solicitud: fecha, tipo de mesa, `estado` (pendiente → confirmada / rechazada; cancelada, caducada), contacto, personas, total |
+| `reserva_lineas` | Bebidas de cada reserva: grupo, producto, cantidad y precio por unidad del momento |
+| `tipos_mesa` | Mesas de cada tipo por noche (aforo). No se pueden confirmar más reservas que mesas |
+| `vista_reservas` | Vista para gestionar las reservas desde Supabase (pedido en texto y enlace de WhatsApp) |
+| `migraciones` | Migraciones de `supabase/migrations` ya aplicadas |
+| `web_contenido` | Lo que se edita en el panel: una fila con los eventos, otra con los días cambiados y otra con los ajustes de la galería |
+
+Las reservas se crean con la función `crear_reserva` (cabecera y bebidas a la vez). Para confirmar o rechazar una, cambia su `estado` en Supabase. Los teléfonos se guardan en formato internacional (`+34…`).
 
 **Puesta en marcha (una vez por proyecto de Supabase):**
-1. Supabase → **SQL Editor → New query**, pega `supabase/schema.sql` y pulsa **Run**. Se puede volver a ejecutar sin perder datos.
+1. Aplica las migraciones de `supabase/migrations` en orden (Supabase → **SQL Editor → New query** → pega el archivo → **Run**). La `005_web_contenido.sql` es la del panel de la web y se puede ejecutar más de una vez sin perder datos.
 2. Supabase → **Project Settings → API Keys**: copia la URL del proyecto y la clave secreta (`sb_secret_…`) a `SUPABASE_URL` y `SUPABASE_SECRET_KEY` en `.env`.
-3. `npm run comprobar-supabase`: lee los RPPs, apunta y borra un nombre de prueba.
+3. `npm run comprobar-supabase`: comprueba la lista, los reservados y el panel creando datos de prueba en la noche del 31/12/2099 y borrándolos al acabar.
 
 La clave secreta da acceso total a la base de datos: solo en `.env` y en las variables del hosting, nunca en el código, en el README ni en GitHub. Si se filtra, genera otra en el mismo panel.
 
@@ -80,19 +112,22 @@ En el plan gratuito, Supabase pausa el proyecto tras 7 días sin actividad; se r
 
 ## Tareas habituales
 
-### Poner la portada de una noche
-Guarda la portada de Instagram como `img/portadas/AAAA-MM-DD.jpg` (también valen `.jpeg`, `.png` y `.webp`). Aparece sola en el calendario; si no hay, se muestra el logo.
-Para añadir título, artistas, descripción o enlace al post, usa `data/eventos.js`.
+### Crear un evento o ponerle foto
+Panel → **Eventos y calendario** → pulsa el día. Si una noche no tiene foto, se muestra el logo.
 
 ### Subir fotos a la galería
-1. Crea `img/galeria/2026-10-17` (opcional: `img/galeria/2026-10-17 Noche Tropical`) y mete las fotos, a ser posible de unos 1600 px de lado largo.
-2. Ejecuta `powershell -ExecutionPolicy Bypass -File actualizar-galeria.ps1`.
+La galería lee las carpetas de Google Drive a través del Google Apps Script de `galeria.scriptUrl` en `data/config.js`. Cada carpeta es un álbum.
+1. Crea una carpeta nueva en Drive (su nombre es el título del álbum) y sube las fotos.
+2. Las fotos tienen que estar compartidas como "Cualquier persona con el enlace" para que se vean en la web.
+3. Portada: la elegida en el panel; si no hay, la foto llamada `portada` (`portada.jpg`, `portada.png`…); si tampoco, la primera.
+4. No hace falta tocar la web: el álbum aparece solo al recargar. Una carpeta vacía no se muestra.
+5. Los álbumes salen del más reciente al más antiguo (los anclados en el panel, primero). Se ven los que caben en una fila y el resto con "Ver galería".
 
 ### Cerrar o abrir un día concreto
-En `data/config.js`, añade la fecha a `cerrado` o a `aperturasExtra`.
+Panel → **Eventos y calendario** → pulsa el día → "Abrir" o "Cerrar". (También se puede con `cerrado` y `aperturasExtra` en `data/config.js`; lo del panel manda.)
 
 ## Publicar
-La lista necesita un hosting que ejecute Node.js (Render, Railway, un VPS…); GitHub Pages no sirve. Define `ADMIN_KEY`, `FORM_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y, detrás de un proxy, `TRUST_PROXY=1`. Sin Supabase, los datos se guardan en archivos JSON, que en estos hostings se pierden al redesplegar.
+La lista necesita un hosting que ejecute Node.js (Render, Railway, un VPS…); GitHub Pages no sirve. Define `ADMIN_KEY`, `FORM_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `DRIVE_SCRIPT_CLAVE` y, detrás de un proxy, `TRUST_PROXY=1`. Sin Supabase, los datos se guardan en archivos JSON, que en estos hostings se pierden al redesplegar.
 
 ## Flujo de trabajo (2 personas)
 

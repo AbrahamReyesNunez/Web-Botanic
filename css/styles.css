@@ -810,71 +810,143 @@ button { font: inherit; color: inherit; }
 .list-done p { margin: 0 0 1rem; color: var(--muted); font-size: .92rem; }
 .list-closed { color: var(--muted); font-size: .92rem; margin: 0; }
 
-/* ---------- Galería ---------- */
-.gal-filters {
-  display: flex; gap: .5rem;
-  overflow-x: auto;
-  margin: 0 calc(var(--gutter) * -1) 1.4rem;
-  padding: 4px var(--gutter) 8px;
-  scrollbar-width: none;
+/* ---------- Galería: álbumes de Google Drive ---------- */
+/* Carga y error mientras responde el script */
+.gal-estado {
+  display: flex; flex-direction: column; align-items: center; gap: .35rem;
+  padding: 3rem 1rem;
+  border: 1px dashed rgba(255,255,255,.18);
+  border-radius: var(--radius);
+  text-align: center;
 }
-.gal-filters::-webkit-scrollbar { display: none; }
-.chip {
-  --btn-bg: #071511;
-  flex: none;
-  min-height: 40px;
-  padding: .45rem 1.1rem;
-  border-radius: 999px;
-  border: 1.5px solid transparent;
-  background:
-    linear-gradient(var(--btn-bg), var(--btn-bg)) padding-box,
-    linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,.18)) border-box;
-  font-family: var(--font-display);
-  font-size: .62rem;
-  font-weight: 600;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color .2s;
-}
-.chip:hover { color: var(--neon-soft); }
-.chip[aria-selected="true"] {
-  --btn-bg: #2a0b25;
-  background:
-    linear-gradient(var(--btn-bg), var(--btn-bg)) padding-box,
-    var(--ring) border-box;
-  animation: spin 4s linear infinite;
-  color: #fff;
+.gal-estado p { margin: 0; }
+.gal-estado-titulo { font-weight: 700; font-size: 1.05rem; }
+.gal-estado-nota { color: var(--muted); font-size: .9rem; }
+.gal-error { border-color: rgba(255,107,125,.45); }
+.gal-error .gal-estado-titulo { color: var(--danger); }
+.gal-error .btn { margin-top: 1rem; }
+@keyframes galGirar { to { transform: rotate(360deg); } }
+.gal-spinner {
+  width: 40px; height: 40px;
+  margin-bottom: .5rem;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.1);
+  border-top-color: var(--neon);
+  border-right-color: var(--violet);
+  filter: drop-shadow(0 0 6px rgba(255,58,216,.6));
+  animation: galGirar .9s linear infinite;
 }
 
-.gal-grid { columns: 4 240px; column-gap: 12px; }
-@media (max-width: 520px) { .gal-grid { columns: 2; column-gap: 8px; } }
-.gal-item {
-  display: block; width: 100%;
-  margin: 0 0 12px;
-  padding: 0; border: 0;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--surface);
-  cursor: zoom-in;
-  break-inside: avoid;
-  position: relative;
+/* Tarjetas de álbum: portada = primera foto */
+.gal-albumes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 18px;
 }
-@media (max-width: 520px) { .gal-item { margin-bottom: 8px; } }
-.gal-item img { width: 100%; height: auto; transition: transform .7s var(--ease-out), opacity .4s, filter .4s; opacity: 0; }
-.gal-item img.loaded { opacity: 1; }
-.gal-item:hover img { transform: scale(1.06); filter: saturate(1.25); }
-.gal-item::after {
+/* En móvil, dos álbumes por fila (con una sola columna solo se vería uno antes de "Ver galería") */
+@media (max-width: 520px) {
+  .gal-albumes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .gal-album-info { padding: .65rem .7rem .75rem; }
+  .gal-album-nombre { font-size: .78rem; }
+  .gal-album-meta { font-size: .76rem; }
+  .gal-album-n { top: 6px; right: 6px; padding: .1rem .5rem; font-size: .68rem; }
+}
+.gal-mas { text-align: center; margin-top: 1.6rem; }
+.gal-album {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: transform .35s var(--ease-out), border-color .3s, box-shadow .3s;
+}
+.gal-album:hover, .gal-album:focus-visible {
+  transform: translateY(-4px);
+  border-color: rgba(255,58,216,.55);
+  box-shadow: 0 0 0 1px rgba(255,58,216,.35), 0 14px 40px -12px rgba(255,58,216,.45);
+}
+.gal-album-portada { position: relative; aspect-ratio: 4 / 3; background: var(--surface-2); overflow: hidden; }
+.gal-album-portada img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s var(--ease-out); }
+.gal-album:hover .gal-album-portada img { transform: scale(1.05); }
+.gal-album-info { padding: .9rem 1rem 1.05rem; }
+.gal-album-nombre { margin: 0; font-family: var(--font-display); font-size: .95rem; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.gal-album-meta { margin: .3rem 0 0; color: var(--muted); font-size: .88rem; }
+.gal-album-n {
+  position: absolute; top: 10px; right: 10px;
+  padding: .2rem .65rem;
+  border-radius: 999px;
+  background: rgba(5,16,13,.8);
+  border: 1px solid rgba(255,58,216,.5);
+  font-size: .75rem; font-weight: 700;
+}
+
+/* Álbum abierto: cabecera y cuadrícula de fotos */
+.gal-album-cab { margin-bottom: 1.4rem; }
+.gal-volver {
+  display: inline-block;
+  margin-bottom: .8rem;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: .66rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color .2s;
+}
+.gal-volver:hover, .gal-volver:focus-visible { color: var(--neon-soft); }
+.gal-album-titulo { margin: 0; font-family: var(--font-display); font-size: clamp(1.1rem, 3.5vw, 1.6rem); font-weight: 800; text-transform: uppercase; overflow-wrap: anywhere; }
+.gal-fotos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+/* minmax(0, 1fr): sin el 0, la columna crecería hasta el ancho real de la imagen (800px) */
+@media (max-width: 520px) { .gal-fotos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+.gal-foto {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.gal-foto::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
   transition: box-shadow .3s;
   pointer-events: none;
 }
-.gal-item:hover::after { box-shadow: inset 0 0 0 2px var(--neon), inset 0 0 30px rgba(255,58,216,.35); }
+.gal-foto:hover::after { box-shadow: inset 0 0 0 2px var(--neon), inset 0 0 30px rgba(255,58,216,.35); }
+.gal-foto-abrir { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.gal-foto-abrir img { width: 100%; height: 100%; object-fit: cover; transition: transform .7s var(--ease-out), filter .4s; }
+.gal-foto:hover .gal-foto-abrir img { transform: scale(1.06); filter: saturate(1.25); }
+/* Botón de descarga sobre cada foto (y en el visor) */
+.gal-descargar, .lb-download {
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.25);
+  background: rgba(5,16,13,.82);
+  color: #fff;
+  transition: border-color .2s, background .2s, transform .2s;
+}
+.gal-descargar { position: absolute; right: 8px; bottom: 8px; z-index: 1; width: 38px; height: 38px; }
+.gal-descargar:hover, .gal-descargar:focus-visible, .lb-download:hover, .lb-download:focus-visible { border-color: var(--neon); background: #2a0a26; }
+.gal-descargar:hover { transform: scale(1.08); }
+.gal-descargar svg, .lb-download svg { width: 18px; height: 18px; }
+/* Foto que no carga ni con la URL alternativa */
+img.rota { opacity: 0; }
+.gal-rota {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: 1rem;
+  color: var(--muted); font-size: .8rem; text-align: center;
+  pointer-events: none;
+}
 .gal-empty { text-align: center; padding: 3rem 1rem; border: 1px dashed rgba(255,255,255,.18); border-radius: var(--radius); color: var(--muted); }
 .gal-empty p { margin: 0 0 1.2rem; }
-.gal-more { text-align: center; margin-top: 1.6rem; }
 
 /* ---------- Visor ---------- */
 .lightbox {
@@ -885,8 +957,13 @@ button { font: inherit; color: inherit; }
   animation: fade .2s ease;
 }
 @keyframes fade { from { opacity: 0; } }
-.lb-figure { margin: 0; max-width: min(1100px, 100%); max-height: 100%; display: flex; flex-direction: column; align-items: center; }
-.lb-figure img { max-height: calc(100vh - 140px); max-height: calc(100svh - 140px); width: auto; border-radius: 8px; }
+.lb-figure { position: relative; margin: 0; max-width: min(1100px, 100%); max-height: 100%; display: flex; flex-direction: column; align-items: center; }
+.lb-figure img { max-height: calc(100vh - 140px); max-height: calc(100svh - 140px); width: auto; border-radius: 8px; transition: opacity .25s; }
+/* Mientras llega la foto grande de Drive se ve el spinner */
+.lb-spinner { position: absolute; top: 50%; left: 50%; margin: -20px 0 0 -20px; display: none; }
+.lb-figure.cargando .lb-spinner { display: block; }
+.lb-figure.cargando img { opacity: 0; min-width: 40px; min-height: 40px; }
+.lb-download { position: absolute; top: 12px; right: 66px; width: 44px; height: 44px; }
 .lb-figure figcaption { margin-top: .7rem; font-size: .85rem; color: var(--muted); }
 .lb-close, .lb-nav {
   position: absolute;
@@ -1388,7 +1465,35 @@ button { font: inherit; color: inherit; }
 .res-hueco.lleno::before { transform: scaleY(1); }
 .res-hueco.nuevo::before { animation: liquidoIn .55s var(--ease-out) both; animation-delay: calc(var(--i) * 35ms); }
 @keyframes liquidoIn { from { transform: scaleY(0); } }
-.res-hueco.sobra { --chapa: var(--danger); --liquido: linear-gradient(to top, var(--danger), #ff9aa6); }
+
+/* Hueco con su refresco: colores del catálogo (aspecto) y etiqueta en vez del reflejo */
+.res-hueco.pintado.lleno {
+  --chapa: var(--chapa-color, var(--neon-soft));
+  --liquido: linear-gradient(90deg, rgba(0,0,0,.28), rgba(255,255,255,.18) 30%, rgba(0,0,0,0) 50%, rgba(0,0,0,.22)), var(--color);
+}
+.res-hueco.pintado.lleno::after {
+  left: 0; right: 0; width: auto; top: 56%; bottom: auto; height: 22%; border-radius: 0;
+  background: linear-gradient(to bottom, transparent 40%, rgba(255,255,255,.75) 40% 55%, transparent 55%), var(--etiqueta, transparent);
+}
+.res-hueco.pintado.nuevo::after { animation: etiquetaIn .55s var(--ease-out) both; animation-delay: calc(var(--i) * 35ms + .2s); }
+@keyframes etiquetaIn { from { opacity: 0; } }
+
+/* Lata: silueta propia, el cuerpo entero es del color de la marca y la tapa es metálica */
+.res-hueco.envase-lata {
+  width: 15px;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 34'><path d='M4 3h8v.8l1.6 1.8v24.8L12 32.2v.8H4v-.8l-1.6-1.8V5.6L4 3.8z'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 34'><path d='M4 3h8v.8l1.6 1.8v24.8L12 32.2v.8H4v-.8l-1.6-1.8V5.6L4 3.8z'/></svg>");
+  background:
+    linear-gradient(to bottom, transparent 0 9%, var(--chapa) 9% 15%, transparent 15% 95%, var(--chapa) 95%),
+    linear-gradient(90deg, rgba(255,255,255,.1), rgba(255,255,255,.2) 35%, rgba(255,255,255,.08));
+}
+.res-hueco.envase-lata::before { top: 15%; bottom: 5%; }
+.res-hueco.envase-lata.pintado.lleno::after { top: 38%; height: 30%; }
+
+/* Agua: botella de plástico, casi transparente, con tapón y etiqueta azules */
+.res-hueco.envase-agua.pintado.lleno { --liquido: linear-gradient(90deg, rgba(255,255,255,.1), rgba(255,255,255,.45) 30%, rgba(255,255,255,.05) 55%), var(--color); }
+
+.res-hueco.sobra, .res-hueco.pintado.sobra { --chapa: var(--danger); --liquido: linear-gradient(to top, var(--danger), #ff9aa6); }
 .res-medidor-txt { margin: .65rem 0 0; font-size: .88rem; color: var(--muted); }
 .res-medidor-txt strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .res-medidor-txt.ok, .res-medidor-txt.ok strong { color: var(--leaf); }

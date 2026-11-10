@@ -1,16 +1,19 @@
 /* =========================================================
    CALENDARIO DE APERTURA — compartido entre la web y el servidor
    En el navegador crea window.BotanicCalendario con la configuración
-   de data/config.js. En Node exporta la función crearCalendario(cfg, ahora).
+   de data/config.js y los días del panel (/api/web.js).
+   En Node exporta la función crearCalendario(cfg, ahora, diasPanel).
    ========================================================= */
 (function (root, crearCalendario) {
   "use strict";
   if (typeof module === "object" && module.exports) module.exports = crearCalendario;
-  else root.BotanicCalendario = crearCalendario(root.BOTANIC_CONFIG || {});
-})(typeof self !== "undefined" ? self : this, function crearCalendario(cfg, ahora) {
+  else root.BotanicCalendario = crearCalendario(root.BOTANIC_CONFIG || {}, null, () => (root.BOTANIC_WEB || {}).dias || {});
+})(typeof self !== "undefined" ? self : this, function crearCalendario(cfg, ahora, diasPanel) {
   "use strict";
   // ahora(): Date cuyos campos locales son la hora de la discoteca (en el servidor, Europe/Madrid)
   ahora = ahora || (() => new Date());
+  // diasPanel(): { "AAAA-MM-DD": "cerrado" | "abierto" } que se cambian desde el panel; mandan sobre data/config.js
+  diasPanel = diasPanel || (() => ({}));
 
   const pad = (n) => String(n).padStart(2, "0");
   const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -27,6 +30,9 @@
 
   function isOpen(d) {
     const k = keyOf(d);
+    const panel = diasPanel()[k];
+    if (panel === "abierto") return true;
+    if (panel === "cerrado") return false;
     if ((cfg.aperturasExtra || []).includes(k)) return true;
     if ((cfg.cerrado || []).includes(k)) return false;
     return (cfg.diasAbierto || [3, 4, 5, 6]).includes(d.getDay());

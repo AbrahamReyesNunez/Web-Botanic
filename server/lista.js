@@ -87,7 +87,7 @@ function crearLista({ almacen, cal, cfg, secreto, tokenMinMs = 3000, tokenMaxMs 
     return { status: 201, cuerpo: { ok: true, nombre: v.nombre, rpp: rpp ? rpp.nombre : null } };
   }
 
-  return { crearToken, inscribir, cerrar: () => { intentos.cerrar(); altas.cerrar(); } };
+  return { crearToken, validarToken: tokenValido, inscribir, cerrar: () => { intentos.cerrar(); altas.cerrar(); } };
 }
 
 module.exports = { crearLista };

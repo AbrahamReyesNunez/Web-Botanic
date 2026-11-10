@@ -1,6 +1,9 @@
 /* =========================================================
    PORTADAS Y EVENTOS DEL CALENDARIO
    ---------------------------------------------------------
+   LO NORMAL: crea y edita los eventos (nombre, foto…) desde el panel,
+   /admin.html → Eventos y calendario. Lo del panel manda sobre este archivo.
+
    FORMA RÁPIDA (sin tocar este archivo):
      Guarda la portada que se sube a Instagram en
        img/portadas/AAAA-MM-DD.jpg      (ej: img/portadas/2026-10-17.jpg)

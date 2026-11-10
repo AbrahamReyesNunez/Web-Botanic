@@ -69,12 +69,20 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
 
   /* Noches con inscripciones más las próximas abiertas, de más reciente a más antigua */
   async function noches() {
-    const cuenta = new Map((await almacen.recuentoNoches()).map((x) => [x.fecha, x.total]));
-    for (const d of cal.proximasNoches(8)) { const k = cal.keyOf(d); if (!cuenta.has(k)) cuenta.set(k, 0); }
+    const [listas, solicitudes] = await Promise.all([almacen.recuentoNoches(), almacen.recuentoReservas()]);
+    const cuenta = new Map(listas.map((x) => [x.fecha, { fecha: x.fecha, total: x.total, reservas: 0 }]));
+    for (const x of solicitudes) {
+      if (!cuenta.has(x.fecha)) cuenta.set(x.fecha, { fecha: x.fecha, total: 0, reservas: 0 });
+      cuenta.get(x.fecha).reservas = x.total;
+    }
+    for (const d of cal.proximasNoches(8)) {
+      const k = cal.keyOf(d);
+      if (!cuenta.has(k)) cuenta.set(k, { fecha: k, total: 0, reservas: 0 });
+    }
     const proxima = cal.proximasNoches(1)[0];
     return {
       porDefecto: proxima ? cal.keyOf(proxima) : null,
-      noches: [...cuenta].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([fecha, total]) => ({ fecha, total }))
+      noches: [...cuenta.values()].sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
     };
   }
 
@@ -92,7 +100,36 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
         fecha,
         total: lista.length,
         porRpp: [...grupos].map(([codigo, total]) => ({ codigo, nombre: rpps.nombre(codigo), total })),
-        inscripciones: lista.map((x) => ({ id: x.id, nombre: x.nombre, rpp: rpps.nombre(x.rpp), creado: x.creado }))
+        inscripciones: lista.map((x) => ({ id: x.id, nombre: x.nombre, rpp: rpps.nombre(x.rpp), rppCodigo: x.rpp, creado: x.creado }))
+      }
+    };
+  }
+
+  async function reservas(fecha) {
+    if (!cal.esClaveValida(fecha)) return { status: 400, cuerpo: { ok: false, error: "Fecha no válida." } };
+    const [lista, rpps] = await Promise.all([almacen.reservasDeNoche(fecha), nombresRpp()]);
+    const vip = lista.filter((x) => x.tipo === "vip").length;
+    const pista = lista.filter((x) => x.tipo === "pista").length;
+    return {
+      status: 200,
+      cuerpo: {
+        ok: true,
+        fecha,
+        total: lista.length,
+        vip,
+        pista,
+        reservas: lista.map((x) => ({
+          id: x.id,
+          tipo: x.tipo,
+          estado: x.estado || "pendiente",
+          nombre: x.nombre,
+          botellas: x.botellas,
+          refrescos: x.refrescos,
+          chupitos: x.chupitos,
+          champan: x.champan,
+          rpp: rpps.nombre(x.rpp),
+          creado: x.creado
+        }))
       }
     };
   }
@@ -100,6 +137,48 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
   async function rpps() {
     const lista = await almacen.rpps();
     return { status: 200, cuerpo: { ok: true, rpps: lista.map(({ codigo, nombre, activo }) => ({ codigo, nombre, activo: activo !== false })) } };
+  }
+
+  function validarNombreRpp(nombre) {
+    return typeof nombre === "string" && nombre.trim().length > 0 && nombre.trim().length <= 60 && !/[\u0000-\u001f\u007f]/.test(nombre);
+  }
+
+  async function crearRpp(datos) {
+    if (!datos || !validarNombreRpp(datos.nombre)) {
+      return { status: 400, cuerpo: { ok: false, error: "El nombre del RPP debe tener entre 1 y 60 caracteres." } };
+    }
+    // El código (el de los links) lo genera el almacén; en Supabase, la propia base de datos
+    const rpp = await almacen.crearRpp({ nombre: datos.nombre.trim() });
+    return { status: 201, cuerpo: { ok: true, rpp } };
+  }
+
+  async function actualizarRpp(codigo, datos = {}) {
+    if (!/^[a-z0-9]{4,32}$/.test(codigo)) return { status: 400, cuerpo: { ok: false, error: "Código de RPP no válido." } };
+    if (!datos || typeof datos !== "object" || Array.isArray(datos)) {
+      return { status: 400, cuerpo: { ok: false, error: "Los cambios del RPP no son válidos." } };
+    }
+    const cambios = {};
+    if (Object.hasOwn(datos, "nombre")) {
+      if (!validarNombreRpp(datos.nombre)) return { status: 400, cuerpo: { ok: false, error: "El nombre del RPP debe tener entre 1 y 60 caracteres." } };
+      cambios.nombre = datos.nombre.trim();
+    }
+    if (Object.hasOwn(datos, "activo")) {
+      if (typeof datos.activo !== "boolean") return { status: 400, cuerpo: { ok: false, error: "El estado del RPP no es válido." } };
+      cambios.activo = datos.activo;
+    }
+    if (!Object.keys(cambios).length) return { status: 400, cuerpo: { ok: false, error: "No hay cambios válidos." } };
+    const rpp = await almacen.actualizarRpp(codigo, cambios);
+    return rpp
+      ? { status: 200, cuerpo: { ok: true, rpp } }
+      : { status: 404, cuerpo: { ok: false, error: "RPP no encontrado." } };
+  }
+
+  async function eliminarRpp(codigo) {
+    if (!/^[a-z0-9]{4,32}$/.test(codigo)) return { status: 400, cuerpo: { ok: false, error: "Código de RPP no válido." } };
+    const rpp = await almacen.actualizarRpp(codigo, { activo: false });
+    return rpp
+      ? { status: 200, cuerpo: { ok: true } }
+      : { status: 404, cuerpo: { ok: false, error: "RPP no encontrado." } };
   }
 
   async function csv(fecha) {
@@ -116,7 +195,7 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
     return ok ? { status: 200, cuerpo: { ok: true } } : { status: 404, cuerpo: { ok: false, error: "No existe." } };
   }
 
-  return { autorizado, login, logout, noches, resumen, rpps, csv, borrar, cerrar: () => intentosLogin.cerrar() };
+  return { autorizado, login, logout, noches, resumen, reservas, rpps, crearRpp, actualizarRpp, eliminarRpp, csv, borrar, cerrar: () => intentosLogin.cerrar() };
 }
 
 module.exports = { crearAdmin };

@@ -79,18 +79,20 @@ window.BOTANIC_RESERVADOS = {
     { nombre: "Moët verde", precio: null, alias: ["moet", "champagne", "cava"] }
   ],
 
+  // envase: "botellin" (cristal), "lata" o "agua" (botella de plástico).
+  // aspecto: colores del dibujo en el medidor → líquido (o cuerpo de la lata), chapa/tapón y etiqueta
   refrescos: [
-    { nombre: "Coca-Cola", alias: ["cocacola", "pepsi", "cola"] },
-    { nombre: "Coca-Cola Zero", alias: ["cocacola", "pepsi zero", "pepsi max", "coca light", "light"] },
-    { nombre: "Fanta naranja", alias: ["kas naranja", "kas"] },
-    { nombre: "Fanta limón", alias: ["kas limon", "kas"] },
-    { nombre: "Tónica", alias: ["schweppes"] },
-    { nombre: "Tónica fresa", alias: ["schweppes"] },
-    { nombre: "Tónica limón", alias: ["schweppes"] },
-    { nombre: "Sprite", alias: ["seven up", "7up", "7 up", "gaseosa", "limon"] },
-    { nombre: "Power King", suplemento: 5, alias: ["red bull", "redbull", "monster", "burn", "energetica"] },
-    { nombre: "Zumo de piña", alias: ["jugo"] },
-    { nombre: "Zumo de melocotón", alias: ["jugo"] },
-    { nombre: "Agua", alias: ["agua mineral"] }
+    { nombre: "Coca-Cola", envase: "botellin", aspecto: { liquido: "#3a1a0c", chapa: "#e41c23", etiqueta: "#e41c23" }, alias: ["cocacola", "pepsi", "cola"] },
+    { nombre: "Coca-Cola Zero", envase: "botellin", aspecto: { liquido: "#3a1a0c", chapa: "#111111", etiqueta: "#111111" }, alias: ["cocacola", "pepsi zero", "pepsi max", "coca light", "light"] },
+    { nombre: "Fanta naranja", envase: "botellin", aspecto: { liquido: "#ff8a00", chapa: "#1d5bd8", etiqueta: "#1d5bd8" }, alias: ["kas naranja", "kas"] },
+    { nombre: "Fanta limón", envase: "botellin", aspecto: { liquido: "#f2dc3c", chapa: "#1d5bd8", etiqueta: "#2e9b3a" }, alias: ["kas limon", "kas"] },
+    { nombre: "Tónica", envase: "botellin", aspecto: { liquido: "#e4f1ec", chapa: "#f2c100", etiqueta: "#f2c100" }, alias: ["schweppes"] },
+    { nombre: "Tónica fresa", envase: "botellin", aspecto: { liquido: "#ff7a9a", chapa: "#f2c100", etiqueta: "#d6224f" }, alias: ["schweppes"] },
+    { nombre: "Tónica limón", envase: "botellin", aspecto: { liquido: "#f3eaa0", chapa: "#f2c100", etiqueta: "#9bc53d" }, alias: ["schweppes"] },
+    { nombre: "Sprite", envase: "botellin", aspecto: { liquido: "#bfe8c4", chapa: "#1f9d4a", etiqueta: "#1f9d4a" }, alias: ["seven up", "7up", "7 up", "gaseosa", "limon"] },
+    { nombre: "Power King", suplemento: 5, envase: "lata", aspecto: { liquido: "#1c3fa8", chapa: "#c9ced6", etiqueta: "#e41c23" }, alias: ["red bull", "redbull", "monster", "burn", "energetica"] },
+    { nombre: "Zumo de piña", envase: "botellin", aspecto: { liquido: "#f7c948", chapa: "#e8a400", etiqueta: "#2e9b3a" }, alias: ["jugo"] },
+    { nombre: "Zumo de melocotón", envase: "botellin", aspecto: { liquido: "#ffa65c", chapa: "#e07a2e", etiqueta: "#e07a2e" }, alias: ["jugo"] },
+    { nombre: "Agua", envase: "agua", aspecto: { liquido: "#cdeaff", chapa: "#2b7bd6", etiqueta: "#2b7bd6" }, alias: ["agua mineral"] }
   ]
 };

@@ -5,9 +5,10 @@
   "use strict";
 
   const CFG = window.BOTANIC_CONFIG || {};
-  const EVENTOS = window.BOTANIC_EVENTOS || {};
+  // Contenido editado desde el panel (/api/web.js): manda sobre data/eventos.js
+  const WEB = window.BOTANIC_WEB || {};
+  const EVENTOS = { ...(window.BOTANIC_EVENTOS || {}), ...(WEB.eventos || {}) };
   const NOCHES = window.BOTANIC_NOCHES || {};
-  const GALERIA = window.BOTANIC_GALERIA || [];
 
   const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -39,7 +40,6 @@
   const { keyOf, fromKey, addDays, today, isOpen, horarioDe, listaAbierta, proximasNoches } = window.BotanicCalendario;
 
   const fechaLarga = (d) => `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
-  const fechaCorta = (d) => `${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)}`;
 
   function noche(d) {
     const k = keyOf(d);
@@ -48,7 +48,8 @@
       key: k,
       date: d,
       titulo: ev.titulo || NOCHES[d.getDay()] || `${DIAS[d.getDay()]} Botanic`,
-      artistas: ev.artistas || "",
+      dj: ev.dj || "",
+      artistas: ev.artistas || "",   // solo data/eventos.js; el panel usa dj
       descripcion: ev.descripcion || "",
       instagram: ev.instagram || "",
       portada: ev.portada || "",
@@ -62,6 +63,7 @@
   function probe(url) {
     return new Promise((res) => {
       const img = new Image();
+      img.referrerPolicy = "no-referrer";   // Drive rechaza algunas peticiones con Referer
       img.onload = () => res(url);
       img.onerror = () => res(null);
       img.src = url;
@@ -73,6 +75,8 @@
     if (coverCache.has(k)) return coverCache.get(k);
     const ev = EVENTOS[k];
     const candidatos = [];
+    // Foto subida desde el panel (Google Drive), con la URL alternativa por si falla la primera
+    if (ev && ev.foto) candidatos.push(driveThumb(ev.foto, "w1200"), driveAlternativa(ev.foto, "w1200"));
     if (ev && ev.portada) candidatos.push(ev.portada);
     EXT_PORTADA.forEach((ext) => candidatos.push(`img/portadas/${k}.${ext}`));
     const p = (async () => {
@@ -93,7 +97,7 @@
     wrap.appendChild(el("div", { class: "cover-fallback", role: "img", "aria-label": "Botanic" }));
     resolveCover(d).then((url) => {
       if (!url) return;
-      const img = el("img", { src: url, alt: `Portada: ${n.titulo}, ${fechaLarga(d)}`, loading: eager ? "eager" : "lazy", decoding: "async" });
+      const img = el("img", { src: url, alt: `Portada: ${n.titulo}, ${fechaLarga(d)}`, loading: eager ? "eager" : "lazy", decoding: "async", referrerpolicy: "no-referrer" });
       wrap.replaceChildren(img);
     });
     return wrap;
@@ -543,6 +547,7 @@
     info.innerHTML = `
       <p class="dp-date">${esc(fechaLarga(d))}</p>
       <h3 class="dp-title">${esc(n.titulo)}</h3>
+      ${n.dj ? `<p class="dp-artists">DJ invitado: ${esc(n.dj)}</p>` : ""}
       ${n.artistas ? `<p class="dp-artists">${esc(n.artistas)}</p>` : ""}
       ${n.descripcion ? `<p class="dp-desc">${esc(n.descripcion)}</p>` : ""}
       <ul class="dp-facts">
@@ -718,67 +723,187 @@
   }
 
   /* =========================================================
-     GALERÍA
+     GALERÍA: álbumes de Google Drive
+     Cada carpeta de Drive es un álbum. Las lista un Google Apps Script (data/config.js → galeria.scriptUrl)
+     que devuelve [{ nombre, creado, fotos: [{ id, nombre }] }]
+       #galeria         → tarjetas de los álbumes
+       #album=Nombre    → fotos de ese álbum, con visor y descarga
      ========================================================= */
-  const gal = { filtro: "todas", fotos: [], visibles: 0, pagina: 24 };
+  const GAL = CFG.galeria || {};
+  const MINI = GAL.tamMiniatura || "w800";
+  const GRANDE = GAL.tamGrande || "w2000";
+  const enc = encodeURIComponent;
+  const driveThumb = (id, tam) => `https://drive.google.com/thumbnail?id=${enc(id)}&sz=${tam}`;
+  const driveAlternativa = (id, tam) => `https://lh3.googleusercontent.com/d/${enc(id)}=${tam}`;
+  const driveDescarga = (id) => `https://drive.google.com/uc?export=download&id=${enc(id)}`;
+  // Sin Referer: Drive responde 429 a las imágenes pedidas desde algunos orígenes (por ejemplo localhost)
+  const driveImg = (id, tam) => `src="${driveThumb(id, tam)}" data-drive-id="${esc(id)}" data-tam="${tam}" referrerpolicy="no-referrer"`;
+  const ICONO_DESCARGA = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>`;
+
+  // albumes: datos del script (null mientras carga) · abierto: nombre del álbum visible (null = lista)
+  // fotos: las del visor · todos: "Ver galería" pulsado (se ven todos los álbumes, no solo una fila)
+  const gal = { albumes: null, abierto: undefined, fotos: [], todos: false };
 
   function initGallery() {
-    const noches = GALERIA.filter((g) => g && g.fotos && g.fotos.length)
-      .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
-
     $("#gal-ig").href = `https://www.instagram.com/${CFG.instagram}/`;
-
-    if (!noches.length) { $("#gal-empty").hidden = false; return; }
-
-    const filters = $("#gal-filters");
-    const mkChip = (id, label) => {
-      const c = el("button", { class: "chip", type: "button", role: "tab", "aria-selected": id === gal.filtro ? "true" : "false" }, esc(label));
-      c.addEventListener("click", () => {
-        gal.filtro = id;
-        filters.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-selected", "false"));
-        c.setAttribute("aria-selected", "true");
-        renderGallery(noches, true);
-      });
-      filters.appendChild(c);
-    };
-    mkChip("todas", "Todas");
-    noches.forEach((g) => {
-      const d = fromKey(g.fecha);
-      mkChip(g.fecha, g.titulo ? `${fechaCorta(d)} · ${g.titulo}` : `${DIAS[d.getDay()]} ${fechaCorta(d)}`);
+    $("#gal-reintentar").addEventListener("click", cargarAlbumes);
+    $("#gal-vista").addEventListener("click", (e) => {
+      const b = e.target.closest(".gal-foto-abrir");
+      if (b) abrirVisor(Number(b.dataset.indice));
+      if (e.target.closest("#gal-mas-btn")) {
+        gal.todos = !gal.todos;
+        ajustarFila();
+        if (!gal.todos) $("#galeria").scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+      }
     });
-
-    $("#gal-more-btn").addEventListener("click", () => renderGallery(noches, false));
-    renderGallery(noches, true);
+    // Al cambiar el ancho caben más o menos álbumes en la fila
+    window.addEventListener("resize", ajustarFila);
+    // El evento "error" de las imágenes no burbujea: se escucha en fase de captura
+    document.addEventListener("error", fotoFallida, true);
+    window.addEventListener("hashchange", pintarGaleria);
+    cargarAlbumes();
   }
 
-  function renderGallery(noches, reset) {
-    const grid = $("#gal-grid");
-    if (reset) {
+  /* Si la miniatura de Drive falla se prueba lh3.googleusercontent.com; si también falla, se avisa */
+  function fotoFallida(e) {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement) || !img.dataset.driveId) return;
+    if (!img.dataset.alternativa) {
+      img.dataset.alternativa = "1";
+      img.src = driveAlternativa(img.dataset.driveId, img.dataset.tam);
+      return;
+    }
+    img.classList.add("rota");
+    if (img.id === "lb-img") return $(".lb-figure").classList.remove("cargando");
+    const caja = img.closest(".gal-foto, .gal-album-portada");
+    if (caja && !$(".gal-rota", caja)) caja.insertAdjacentHTML("beforeend", `<span class="gal-rota">Foto no disponible</span>`);
+  }
+
+  async function cargarAlbumes() {
+    const cargando = $("#gal-cargando");
+    const error = $("#gal-error");
+    error.hidden = true;
+    cargando.hidden = false;
+
+    // El script tarda unos segundos; si no responde en tiempoMaximo, se aborta
+    const control = new AbortController();
+    const temporizador = setTimeout(() => control.abort(), (GAL.tiempoMaximo || 45) * 1000);
+    try {
+      if (!GAL.scriptUrl) throw new Error("falta galeria.scriptUrl en data/config.js");
+      const res = await fetch(GAL.scriptUrl, { signal: control.signal, referrerPolicy: "no-referrer" });
+      if (!res.ok) throw new Error(`el servidor respondió ${res.status}`);
+      const datos = await res.json();
+      if (!Array.isArray(datos)) throw new Error("la respuesta no tiene el formato esperado");
+
+      // Solo álbumes con nombre y al menos una foto (una carpeta recién creada y vacía no sale), los más recientes primero
+      gal.albumes = datos
+        .filter((a) => a && a.nombre)
+        .map((a) => ({ ...a, fotos: Array.isArray(a.fotos) ? a.fotos.filter((f) => f && f.id) : [] }))
+        .filter((a) => a.fotos.length)
+        .map((a) => aplicarAjustes(a, (WEB.galeria || {})[a.id] || {}))
+        // Anclados primero; dentro de cada grupo, los más recientes primero
+        .sort((a, b) => (b.anclado - a.anclado) || ((b.creado || 0) - (a.creado || 0)));
+      cargando.hidden = true;
+      pintarGaleria();
+    } catch (err) {
+      cargando.hidden = true;
+      $("#gal-error-detalle").textContent = err.name === "AbortError"
+        ? "El servidor de fotos está tardando demasiado. Inténtalo de nuevo en un momento."
+        : `Revisa tu conexión e inténtalo de nuevo (${err.message}).`;
+      error.hidden = false;
+    } finally {
+      clearTimeout(temporizador);
+    }
+  }
+
+  /* Ajustes del panel para un álbum (por id de carpeta): nombre, portada, anclado y fotos ancladas */
+  function aplicarAjustes(album, ajustes) {
+    const porId = new Map(album.fotos.map((f) => [f.id, f]));
+    // Las ancladas van primero, en el orden en que se anclaron; las que ya no existen en Drive se ignoran
+    const ancladas = (ajustes.fotosAncladas || []).filter((id) => porId.has(id));
+    const fotos = [...ancladas.map((id) => porId.get(id)), ...album.fotos.filter((f) => !ancladas.includes(f.id))];
+    // Portada: la elegida en el panel; si no, la foto llamada "portada" (portada.jpg, Portada.PNG…); si no, la primera
+    const portada = porId.get(ajustes.portada)
+      || album.fotos.find((f) => /^portada\.[a-z0-9]+$/i.test((f.nombre || "").trim()))
+      || fotos[0];
+    return { ...album, nombre: ajustes.nombre || album.nombre, fotos, portada, anclado: !!ajustes.anclado };
+  }
+
+  function albumDelHash() {
+    const m = location.hash.match(/^#album=(.*)$/);
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+
+  /* De entrada solo se ven los álbumes más recientes que caben en una fila; "Ver galería" muestra todos */
+  function ajustarFila() {
+    const grid = $("#gal-albumes");
+    if (!grid) return;
+    // Con auto-fill, la rejilla resuelve tantas columnas como caben, haya o no tarjetas
+    const columnas = getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+    const tarjetas = [...grid.children];
+    tarjetas.forEach((t, i) => { t.hidden = !gal.todos && i >= columnas; });
+    $("#gal-mas").hidden = tarjetas.length <= columnas;
+    $("#gal-mas-btn").innerHTML = gal.todos
+      ? btnHTML("Ver menos", "↑")
+      : btnHTML(`Ver galería (${tarjetas.length} álbumes)`, "↓");
+  }
+
+  const nFotos = (n) => `${n} ${n === 1 ? "foto" : "fotos"}`;
+  const publicado = (ms) => ms ? `publicado el ${new Date(ms).getDate()} de ${MESES[new Date(ms).getMonth()]}` : "";
+
+  /* Pinta la lista o el álbum según el hash. Solo repinta si cambia lo que hay que ver */
+  function pintarGaleria() {
+    if (!gal.albumes) return;   // aún cargando: se pinta al llegar los datos
+    const nombre = albumDelHash();
+    if (nombre === gal.abierto) return;
+    gal.abierto = nombre;
+    cerrarVisor();
+
+    const vista = $("#gal-vista");
+    $("#gal-empty").hidden = true;
+
+    if (nombre === null) {
       gal.fotos = [];
-      noches.filter((g) => gal.filtro === "todas" || g.fecha === gal.filtro).forEach((g) => {
-        const d = fromKey(g.fecha);
-        const cap = `${g.titulo || DIAS[d.getDay()]} · ${fechaLarga(d)}`;
-        g.fotos.forEach((src) => gal.fotos.push({ src, cap }));
-      });
-      gal.visibles = 0;
-      grid.replaceChildren();
+      if (!gal.albumes.length) { vista.replaceChildren(); $("#gal-empty").hidden = false; return; }
+      vista.innerHTML = `<div class="gal-albumes" id="gal-albumes">${gal.albumes.map((a) => `
+          <a class="gal-album" href="#album=${esc(enc(a.nombre))}">
+            <div class="gal-album-portada">
+              <img ${driveImg(a.portada.id, MINI)} alt="" loading="lazy" decoding="async">
+            </div>
+            <span class="gal-album-n">${nFotos(a.fotos.length)}</span>
+            <div class="gal-album-info">
+              <h3 class="gal-album-nombre">${esc(a.nombre)}</h3>
+              ${a.creado ? `<p class="gal-album-meta">${esc(publicado(a.creado))}</p>` : ""}
+            </div>
+          </a>`).join("")}</div>
+        <div class="gal-mas" id="gal-mas" hidden>
+          <button class="btn btn-ghost" type="button" id="gal-mas-btn"></button>
+        </div>`;
+      ajustarFila();
+    } else {
+      const album = gal.albumes.find((a) => a.nombre === nombre);
+      gal.fotos = album ? album.fotos : [];
+      const cabecera = `
+        <div class="gal-album-cab">
+          <a class="gal-volver" href="#galeria">← Todos los álbumes</a>
+          <h3 class="gal-album-titulo">${album ? esc(album.nombre) : "Álbum no encontrado"}</h3>
+          <p class="gal-album-meta">${album
+            ? esc([nFotos(album.fotos.length), publicado(album.creado)].filter(Boolean).join(" · "))
+            : "Puede que lo hayan renombrado o borrado."}</p>
+        </div>`;
+      const fotos = !album ? "" : `<div class="gal-fotos">${album.fotos.map((f, i) => `
+          <figure class="gal-foto">
+            <button type="button" class="gal-foto-abrir" data-indice="${i}" aria-label="Ampliar foto ${i + 1}">
+              <img ${driveImg(f.id, MINI)} alt="${esc(f.nombre || `Foto ${i + 1}`)}" loading="lazy" decoding="async">
+            </button>
+            <a class="gal-descargar" href="${driveDescarga(f.id)}" rel="noopener" aria-label="Descargar ${esc(f.nombre || `foto ${i + 1}`)}" title="Descargar">${ICONO_DESCARGA}</a>
+          </figure>`).join("")}</div>`;
+      vista.innerHTML = cabecera + fotos;
+      // Al abrir un álbum (no hay elemento con ese id) el navegador no se mueve: se baja a la galería
+      $("#galeria").scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
     }
-    const desde = gal.visibles;
-    const hasta = Math.min(gal.fotos.length, desde + gal.pagina);
-    for (let i = desde; i < hasta; i++) {
-      const f = gal.fotos[i];
-      const b = el("button", { class: "gal-item", type: "button", "aria-label": `Ampliar foto ${i + 1}: ${f.cap}` });
-      const img = el("img", { src: f.src, alt: f.cap, loading: "lazy", decoding: "async" });
-      img.addEventListener("load", () => img.classList.add("loaded"));
-      img.addEventListener("error", () => b.remove());
-      if (img.complete) img.classList.add("loaded");
-      b.appendChild(img);
-      b.addEventListener("click", () => abrirVisor(i));
-      grid.appendChild(b);
-      reveal(b, (i - desde) % 4);
-    }
-    gal.visibles = hasta;
-    $("#gal-more").hidden = gal.visibles >= gal.fotos.length;
+    vista.querySelectorAll(".gal-album, .gal-foto").forEach((n, i) => reveal(n, i % 4));
   }
 
   /* ---------------- Visor ---------------- */
@@ -786,6 +911,7 @@
   let lbLastFocus = null;
 
   function abrirVisor(i) {
+    if (!gal.fotos[i]) return;
     lbLastFocus = document.activeElement;
     lbIndex = i;
     pintarVisor();
@@ -794,16 +920,34 @@
     $("#lb-close").focus();
   }
   function cerrarVisor() {
+    if ($("#lightbox").hidden) return;
     $("#lightbox").hidden = true;
+    $("#lb-img").removeAttribute("src");
     document.body.style.overflow = "";
-    lbLastFocus && lbLastFocus.focus();
+    if (lbLastFocus && document.contains(lbLastFocus)) lbLastFocus.focus();
   }
   function pintarVisor() {
     const f = gal.fotos[lbIndex];
     if (!f) return;
-    $("#lb-img").src = f.src;
-    $("#lb-img").alt = f.cap;
-    $("#lb-caption").textContent = `${f.cap} · ${lbIndex + 1}/${gal.fotos.length}`;
+    const img = $("#lb-img");
+    $(".lb-figure").classList.add("cargando");
+    img.classList.remove("rota");
+    delete img.dataset.alternativa;   // cada foto vuelve a empezar por la miniatura de Drive
+    img.dataset.driveId = f.id;
+    img.dataset.tam = GRANDE;
+    img.alt = f.nombre || `Foto ${lbIndex + 1}`;
+    img.src = driveThumb(f.id, GRANDE);
+    $("#lb-caption").textContent = `${gal.abierto} · ${lbIndex + 1}/${gal.fotos.length}`;
+    $("#lb-download").href = driveDescarga(f.id);
+
+    // Precarga las vecinas para que pasar de foto sea instantáneo
+    [-1, 1].forEach((d) => {
+      const v = gal.fotos[(lbIndex + d + gal.fotos.length) % gal.fotos.length];
+      if (!v || v === f) return;
+      const pre = new Image();
+      pre.referrerPolicy = "no-referrer";
+      pre.src = driveThumb(v.id, GRANDE);
+    });
   }
   function moverVisor(delta) {
     lbIndex = (lbIndex + delta + gal.fotos.length) % gal.fotos.length;
@@ -812,6 +956,7 @@
 
   function initLightbox() {
     const lb = $("#lightbox");
+    $("#lb-img").addEventListener("load", () => $(".lb-figure").classList.remove("cargando"));
     $("#lb-close").addEventListener("click", cerrarVisor);
     $("#lb-prev").addEventListener("click", () => moverVisor(-1));
     $("#lb-next").addEventListener("click", () => moverVisor(1));
@@ -821,6 +966,14 @@
       if (e.key === "Escape") cerrarVisor();
       if (e.key === "ArrowLeft") moverVisor(-1);
       if (e.key === "ArrowRight") moverVisor(1);
+      // El Tab no se escapa del visor
+      if (e.key === "Tab") {
+        const enfocables = [...lb.querySelectorAll("a[href], button")];
+        const primero = enfocables[0];
+        const ultimo = enfocables[enfocables.length - 1];
+        if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+        else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+      }
     });
     let sx = null;
     lb.addEventListener("touchstart", (e) => { sx = e.touches[0].clientX; }, { passive: true });
@@ -1082,7 +1235,7 @@
             <div class="res-carrito-cuerpo"></div>
             <p class="res-pago">El reservado se paga en la puerta de la discoteca.</p>
           </section>
-          <p class="list-legal">La reserva no es firme hasta que te la confirmemos. Solo para mayores de 18 años.</p>
+          <p class="list-legal">Al enviar la solicitud, usaremos tu nombre y teléfono para gestionarla y contactarte. No será firme hasta que la confirmemos. Solo para mayores de 18 años.</p>
         </section>
 
         <p class="form-error" role="alert" hidden></p>
@@ -1101,6 +1254,7 @@
 
     const form = $("form", cuerpo);
     const err = $(".form-error", cuerpo);
+    let tokenReserva = pedirToken().catch(() => null);
     const secciones = Array.from(form.querySelectorAll(".res-paso"));
     const botonesPaso = Array.from(cuerpo.querySelectorAll(".res-paso-btn"));
     const atras = $(".res-atras", form);
@@ -1245,15 +1399,33 @@
     function pintarMedidor(r) {
       const huecos = $(".res-huecos", form);
       const total = Math.max(r.refrescosMax, r.refrescos);
+      // Cada hueco lleno lleva el dibujo de su refresco, en el orden del carrito
+      const elegidos = [];
+      r.lineas.filter((l) => l.grupo === "refrescos").forEach((l) => {
+        const item = (RES.refrescos || []).find((x) => x.nombre === l.nombre) || {};
+        for (let k = 0; k < l.cantidad; k++) elegidos.push(item);
+      });
       // Un grupo de huecos por botella (en móvil, cada botella en su fila)
       let html = "";
       for (let i = 0; i < total; i++) {
         const cls = ["res-hueco"];
+        const item = elegidos[i];
+        let estilo = `--i:${Math.max(0, i - refrescosAntes)}`;
+        let titulo = "";
         if (i < r.refrescos) cls.push("lleno");
         if (i >= refrescosAntes && i < r.refrescos) cls.push("nuevo");
         if (i >= r.refrescosMax) cls.push("sobra");
+        if (item) {
+          if (item.envase) cls.push(`envase-${item.envase}`);
+          const a = item.aspecto || {};
+          if (a.liquido) cls.push("pintado");
+          if (a.liquido) estilo += `;--color:${a.liquido}`;
+          if (a.chapa) estilo += `;--chapa-color:${a.chapa}`;
+          if (a.etiqueta) estilo += `;--etiqueta:${a.etiqueta}`;
+          titulo = ` title="${esc(item.nombre || "")}"`;
+        }
         if (porBotella && i % porBotella === 0) html += (i ? "</span>" : "") + `<span class="res-huecos-botella">`;
-        html += `<span class="${cls.join(" ")}" style="--i:${Math.max(0, i - refrescosAntes)}"></span>`;
+        html += `<span class="${cls.join(" ")}" style="${estilo}"${titulo}></span>`;
       }
       huecos.innerHTML = html + (total && porBotella ? "</span>" : "");
       refrescosAntes = r.refrescos;
@@ -1525,7 +1697,7 @@
     });
 
     /* ---------- Siguiente / enviar ---------- */
-    form.addEventListener("submit", (e) => {
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (paso < ULTIMO_PASO) return avanzar();
 
@@ -1562,15 +1734,52 @@
         aConsultar: r.aConsultar,
         notas: f.notas.value.trim()
       };
-      enviarReserva(datos).then(() => renderReservaHecha(datos));
+      const boton = siguiente;
+      const etiqueta = $(".btn-label", boton);
+      boton.disabled = true;
+      etiqueta.textContent = "Enviando…";
+      try {
+        let token = await tokenReserva;
+        if (!token || Date.now() - token.pedido > 2 * 60 * 60 * 1000) {
+          token = await (tokenReserva = pedirToken());
+        }
+        const espera = 3200 - (Date.now() - token.pedido);
+        if (espera > 0) await new Promise((resolve) => setTimeout(resolve, espera));
+        await enviarReserva(datos, token.valor);
+        renderReservaHecha(datos);
+      } catch (ex) {
+        boton.disabled = false;
+        etiqueta.textContent = "Enviar reserva";
+        mostrarError(ex.message || "No se ha podido enviar la solicitud.");
+        if (/caducado/.test(ex.message || "")) tokenReserva = pedirToken().catch(() => null);
+      }
     });
 
     irA(0, false);
   }
 
-  /* Sin servidor todavía: aquí se conectará el guardado de la reserva */
-  function enviarReserva(datos) {
-    return Promise.resolve(datos);
+  async function enviarReserva(datos, token) {
+    const r = await fetch("/api/reservas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fecha: datos.fecha,
+        tipo: datos.tipo,
+        nombre: datos.nombre,
+        telefono: datos.telefono,
+        personas: datos.personas,
+        rpp: datos.rpp,
+        botellas: datos.botellas,
+        refrescos: datos.refrescos,
+        chupitos: datos.chupitos,
+        champan: datos.champan,
+        notas: datos.notas,
+        token
+      })
+    });
+    const respuesta = await r.json().catch(() => ({}));
+    if (!r.ok || !respuesta.ok) throw new Error(respuesta.error || "No se ha podido guardar la reserva.");
+    return respuesta;
   }
 
   function renderReservaHecha(datos) {

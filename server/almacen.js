@@ -146,7 +146,7 @@ function crearAlmacen(dir) {
   /* Contenido de la web que se edita desde el panel: { eventos, dias, galeria } en contenido.json */
   const archivoContenido = path.join(dir, "contenido.json");
   let colaContenido = Promise.resolve();
-  const leerContenido = async () => ({ eventos: {}, dias: {}, galeria: {}, ...leerJSON(archivoContenido, {}) });
+  const leerContenido = async () => ({ eventos: {}, dias: {}, galeria: {}, ajustes: {}, ...leerJSON(archivoContenido, {}) });
 
   function guardarContenido(seccion, valor) {
     const operacion = colaContenido.then(async () => {

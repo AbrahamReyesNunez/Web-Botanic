@@ -29,10 +29,15 @@
   }
 
   function isOpen(d) {
-    const k = keyOf(d);
-    const panel = diasPanel()[k];
+    const panel = diasPanel()[keyOf(d)];
     if (panel === "abierto") return true;
     if (panel === "cerrado") return false;
+    return abiertoPorConfig(d);
+  }
+
+  /* Solo con data/config.js, sin los cambios del panel */
+  function abiertoPorConfig(d) {
+    const k = keyOf(d);
     if ((cfg.aperturasExtra || []).includes(k)) return true;
     if ((cfg.cerrado || []).includes(k)) return false;
     return (cfg.diasAbierto || [3, 4, 5, 6]).includes(d.getDay());
@@ -60,5 +65,5 @@
     return out;
   }
 
-  return { pad, keyOf, fromKey, startOfDay, addDays, today, esClaveValida, isOpen, horarioDe, listaAbierta, proximasNoches };
+  return { pad, keyOf, fromKey, startOfDay, addDays, today, esClaveValida, isOpen, abiertoPorConfig, horarioDe, listaAbierta, proximasNoches };
 });

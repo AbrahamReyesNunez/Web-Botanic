@@ -3,6 +3,7 @@
    - eventos: nombre, DJ invitado, texto, Instagram y foto de cada noche
    - dias:    días que se cierran o se abren aunque no toque
    - galeria: nombre, portada y anclados de los álbumes de Drive
+   - ajustes: estilo de la web según la época (verano, navidad, halloween, carnaval)
    La web lo recibe en /api/web.js (window.BOTANIC_WEB).
    ========================================================= */
 "use strict";
@@ -11,10 +12,13 @@ const ID_DRIVE = /^[A-Za-z0-9_-]{10,100}$/;
 const INSTAGRAM = /^https:\/\/(www\.)?instagram\.com\/[^\s"'<>]{1,200}$/;
 const TIPOS_FOTO = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 const MAX_ANCLADAS = 200;
+const TEMAS = ["verano", "navidad", "halloween", "carnaval"];   // verano = el estilo de siempre
 
-const vacio = () => ({ eventos: {}, dias: {}, galeria: {} });
+const vacio = () => ({ eventos: {}, dias: {}, galeria: {}, ajustes: {} });
 /* Supabase sin la tabla web_contenido (falta la migración supabase/migrations/005_web_contenido.sql) */
 const faltaTabla = (e) => /web_contenido/.test(e && e.message) && /schema cache|does not exist|Could not find/i.test(e.message);
+/* La tabla aún no admite la sección "ajustes" (falta la migración 006_tema_web.sql) */
+const faltaAjustes = (e) => /web_contenido_seccion_check/.test(e && e.message);
 const ok = (cuerpo = {}, status = 200) => ({ status, cuerpo: { ok: true, ...cuerpo } });
 const error = (status, mensaje) => ({ status, cuerpo: { ok: false, error: mensaje } });
 
@@ -49,9 +53,9 @@ function crearContenido({ almacen, cal, drive }) {
   const enCola = (fn) => (...args) => {
     const p = cola.then(() => fn(...args)).catch((e) => {
       console.error(e);
-      return faltaTabla(e)
-        ? error(503, "Falta la tabla web_contenido en la base de datos. Ejecuta supabase/migrations/005_web_contenido.sql en Supabase → SQL Editor y reinicia el servidor.")
-        : error(500, `No se ha podido guardar en la base de datos (${e.message}).`);
+      if (faltaTabla(e)) return error(503, "Falta la tabla web_contenido en la base de datos. Ejecuta supabase/migrations/005_web_contenido.sql en Supabase → SQL Editor y reinicia el servidor.");
+      if (faltaAjustes(e)) return error(503, "La base de datos aún no puede guardar el estilo de la web. Ejecuta supabase/migrations/006_tema_web.sql en Supabase → SQL Editor.");
+      return error(500, `No se ha podido guardar en la base de datos (${e.message}).`);
     });
     cola = p.catch(() => {});
     return p;
@@ -97,14 +101,19 @@ function crearContenido({ almacen, cal, drive }) {
     return ok({ evento });
   }
 
+  /* Quitar (o cancelar) un evento deja el día cerrado: en la web, la lista y las reservas.
+     Si ese día ya está cerrado según data/config.js, basta con quitar el cambio del panel */
   async function borrarEvento(fecha) {
     if (!cal.esClaveValida(fecha)) return error(400, "Fecha no válida.");
     const anterior = datos.eventos[fecha];
     if (!anterior) return error(404, "Ese día no tiene evento.");
     const { [fecha]: _, ...resto } = datos.eventos;
     await guardar("eventos", resto);
+    const { [fecha]: __, ...otrosDias } = datos.dias;
+    const dia = cal.abiertoPorConfig(cal.fromKey(fecha)) ? "cerrado" : null;
+    await guardar("dias", dia ? { ...otrosDias, [fecha]: dia } : otrosDias);
     borrarFotoDrive(anterior.foto);
-    return ok();
+    return ok({ dia });
   }
 
   /* Sube una foto de evento a Drive y devuelve su id. El evento se guarda aparte con guardarEvento */
@@ -155,6 +164,14 @@ function crearContenido({ almacen, cal, drive }) {
     return ok({ ajustes });
   }
 
+  /* ---------- Estilo de la web según la época ---------- */
+  async function guardarTema(d) {
+    const tema = d && d.tema;
+    if (!TEMAS.includes(tema)) return error(400, `El estilo debe ser uno de estos: ${TEMAS.join(", ")}.`);
+    await guardar("ajustes", { ...datos.ajustes, tema });
+    return ok({ tema });
+  }
+
   return {
     listo,
     dias: () => datos.dias,
@@ -164,7 +181,8 @@ function crearContenido({ almacen, cal, drive }) {
     borrarEvento: enCola(borrarEvento),
     subirFoto,
     guardarDia: enCola(guardarDia),
-    guardarAlbum: enCola(guardarAlbum)
+    guardarAlbum: enCola(guardarAlbum),
+    guardarTema: enCola(guardarTema)
   };
 }
 

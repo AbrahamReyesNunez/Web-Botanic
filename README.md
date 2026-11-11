@@ -79,7 +79,16 @@ La web envía **peticiones**: entran como `pendiente` y el equipo las confirma o
 
 ## Panel de la web
 
-`/admin.html`, con la clave de `ADMIN_KEY`. Tiene dos pestañas:
+`/admin.html`, con la clave de `ADMIN_KEY`.
+
+**Estilo de la web** (arriba del todo): Verano, Navidad, Halloween o Carnaval. Verano es el estilo de siempre; los demás mantienen la estructura, las letras y el neón magenta, y añaden un color secundario y adornos (`css/temas.css` y `js/temas.js`):
+- **Navidad:** dorado y rojo, gorro de Papá Noel en la Ø del logo, guirnalda de luces, bolas colgando y nieve.
+- **Halloween:** naranja y morado, sombrero de bruja, telarañas, araña, calabazas encendidas y murciélagos que cruzan de vez en cuando.
+- **Carnaval (de Cádiz):** amarillo y azul, antifaz, serpentinas, papelillos y guitarra, bombo, caja y pito de caña en neón.
+
+Las partículas (nieve, papelillos, murciélagos) no se muestran con "reducir movimiento" ni en equipos lentos. La web cambia al recargarla.
+
+Además tiene dos pestañas:
 
 - **Eventos y calendario**: un calendario por meses. Al pulsar un día puedes:
   - Marcarlo como abierto o cerrado aunque no toque (por ejemplo, abrir en Nochevieja o cerrar un sábado). Si eliges lo que ya tocaba según `data/config.js`, no se guarda ningún cambio. La lista y los reservados respetan estos cambios al momento.
@@ -110,7 +119,7 @@ Supabase es una base de datos PostgreSQL en la nube con un panel web. Solo habla
 | `reserva_lineas` | `reserva`, `grupo`, `producto`, `cantidad`, `precio` por unidad (null: a consultar) |
 | `migraciones` | Migraciones aplicadas |
 | `vista_reservas` | Vista para leer las reservas: pedido en texto, RPP y enlace de WhatsApp |
-| `web_contenido` | Lo que se edita en el panel de la web: eventos, días cambiados y ajustes de la galería (migración 005) |
+| `web_contenido` | Lo que se edita en el panel de la web: eventos, días cambiados, ajustes de la galería (migración 005) y estilo de la época (sección `ajustes`, migración 006) |
 
 **Migraciones:** cada cambio de la base de datos es un archivo de `supabase/migrations/`. Se aplican **una vez y en orden**: Supabase → **SQL Editor → New query**, pega el archivo entero y pulsa **Run**. La tabla `migraciones` dice cuáles tiene ya tu base de datos. Para un cambio nuevo, crea el siguiente número (`007_….sql`); no edites los ya aplicados.
 

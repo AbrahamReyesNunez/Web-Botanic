@@ -157,7 +157,6 @@
 .adm-punto { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .adm-punto.abierto { background: rgba(47, 224, 168, .35); border: 1px solid var(--leaf); }
 .adm-punto.cerrado { background: rgba(255, 255, 255, .04); border: 1px solid var(--line); }
-.adm-punto.cambiado { background: transparent; border: 2px dashed var(--neon-soft); }
 .adm-punto.evento { background: var(--neon); }
 .adm-semana, .adm-mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .adm-semana { margin-bottom: 6px; color: var(--muted); font-size: .72rem; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
@@ -176,7 +175,6 @@
 }
 .adm-celda:hover, .adm-celda:focus-visible { border-color: var(--neon-soft); }
 .adm-celda.abierto { background: rgba(47, 224, 168, .1); border-color: rgba(47, 224, 168, .45); color: var(--text); }
-.adm-celda.cambiado { border-style: dashed; border-width: 2px; border-color: var(--neon-soft); }
 .adm-celda.hoy .adm-celda-num { background: var(--leaf); color: #04140f; }
 .adm-celda.elegido { box-shadow: 0 0 0 2px var(--neon), 0 0 18px -4px rgba(255, 58, 216, .7); }
 .adm-celda-num { position: relative; z-index: 1; min-width: 1.6em; padding: 0 .3em; border-radius: 6px; font-weight: 700; font-size: .85rem; text-align: center; }
@@ -274,3 +272,23 @@
 }
 .adm-mini[data-accion="portada"][aria-pressed="true"] { border-color: var(--leaf); color: #04140f; background: var(--leaf); }
 .adm-mini[data-accion="anclar"][aria-pressed="true"] { border-color: var(--neon); color: #fff; background: var(--neon); }
+
+/* Estilo de la web según la época */
+.adm-tema { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.adm-tema .eyebrow { margin-bottom: .2rem; }
+.adm-tema .admin-hint { margin: 0; }
+.adm-tema .adm-aviso { flex-basis: 100%; margin: 0; }
+.adm-temas { display: flex; flex-wrap: wrap; gap: 8px; }
+.adm-tema-btn {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .6rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(5, 16, 13, .55);
+  color: var(--muted);
+  font: inherit; font-weight: 700; font-size: .9rem;
+  cursor: pointer;
+  transition: border-color .2s, color .2s, background .2s;
+}
+.adm-tema-btn:hover, .adm-tema-btn:focus-visible { border-color: var(--neon-soft); color: var(--text); }
+.adm-tema-btn[aria-pressed="true"] { border-color: var(--neon); background: #2a0a26; color: #fff; box-shadow: 0 0 18px -6px rgba(255, 58, 216, .7); }

@@ -1,0 +1,171 @@
+/* =========================================================
+   ESTILO DE LA ÉPOCA — complementa styles.css
+   <html data-tema="navidad | halloween | carnaval"> (sin atributo = verano, el de siempre).
+   El neón magenta, la selva, las letras y la estructura no cambian: cada época
+   cambia el color secundario (el verde de los acentos) y añade adornos (js/temas.js).
+   ========================================================= */
+
+/* ---------- Color secundario de cada época ---------- */
+html[data-tema="navidad"] { --leaf: #ffd36b; --violet: #ff4157; }
+html[data-tema="navidad"] .beam-2 { --c: rgba(255, 211, 107, .7); }
+html[data-tema="navidad"] .beam-3 { --c: rgba(255, 65, 87, .65); }
+
+html[data-tema="halloween"] { --leaf: #ff8a1f; --violet: #8b3dff; }
+html[data-tema="halloween"] .beam-2 { --c: rgba(255, 138, 31, .75); }
+html[data-tema="halloween"] .beam-3 { --c: rgba(139, 61, 255, .8); }
+
+html[data-tema="carnaval"] { --leaf: #ffd60a; --violet: #2ec4ff; }
+html[data-tema="carnaval"] .beam-2 { --c: rgba(255, 214, 10, .7); }
+html[data-tema="carnaval"] .beam-3 { --c: rgba(46, 196, 255, .75); }
+
+/* ---------- Adorno sobre la Ø del logo ---------- */
+html[data-tema] .o-slash { position: relative; }
+.tema-logo { position: absolute; z-index: 1; line-height: 0; pointer-events: none; }
+.tema-logo svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 0 .06em rgba(0, 0, 0, .5)); }
+.tema-gorro { width: .8em; left: -.04em; top: -.4em; transform: rotate(-14deg); }
+.tema-sombrero { width: .9em; left: -.1em; top: -.58em; transform: rotate(-8deg); }
+.tema-antifaz { width: 1.1em; left: -.22em; top: .24em; }
+.tema-antifaz svg { filter: drop-shadow(0 0 .08em rgba(255, 58, 216, .7)); }
+
+/* ---------- Tira bajo la cabecera ---------- */
+html[data-tema="navidad"] .topbar::after,
+html[data-tema="carnaval"] .topbar::after {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 100%;
+  pointer-events: none;
+  transition: opacity .35s ease, transform .35s ease;
+}
+/* Solo arriba del todo, en la portada: al bajar por la página no tapan el contenido */
+html[data-tema] .topbar.scrolled::after { opacity: 0; transform: translateY(-10px); }
+/* Guirnalda de luces: parpadea a saltos, como las de verdad */
+html[data-tema="navidad"] .topbar::after {
+  height: 26px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='96' height='26' viewBox='0 0 96 26'><path d='M0 4Q24 14 48 4T96 4' fill='none' stroke='rgb(32,54,44)' stroke-width='1.6'/><g fill='rgb(48,70,58)'><rect x='10' y='7' width='4' height='3.5' rx='1'/><rect x='34' y='7' width='4' height='3.5' rx='1'/><rect x='58' y='7' width='4' height='3.5' rx='1'/><rect x='82' y='7' width='4' height='3.5' rx='1'/></g><ellipse cx='12' cy='15' rx='3.6' ry='5' fill='rgb(255,65,87)'/><ellipse cx='36' cy='15' rx='3.6' ry='5' fill='rgb(255,211,107)'/><ellipse cx='60' cy='15' rx='3.6' ry='5' fill='rgb(47,224,168)'/><ellipse cx='84' cy='15' rx='3.6' ry='5' fill='rgb(46,196,255)'/></svg>") left top / 96px 26px repeat-x;
+  filter: drop-shadow(0 0 4px rgba(255, 211, 107, .55));
+  animation: temaLuces 2.6s steps(1, end) infinite;
+}
+@keyframes temaLuces { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
+/* Serpentinas de colores colgando */
+html[data-tema="carnaval"] .topbar::after {
+  height: 40px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='40' viewBox='0 0 180 40'><g fill='none' stroke-width='3' stroke-linecap='round'><path d='M10 0C2 8 18 12 10 20S16 32 12 40' stroke='rgb(255,58,216)'/><path d='M45 0C53 6 37 12 45 18S41 28 46 34' stroke='rgb(255,214,10)'/><path d='M80 0C72 9 88 13 80 22S84 34 82 38' stroke='rgb(46,196,255)'/><path d='M115 0C123 7 107 12 115 19S111 30 116 36' stroke='rgb(47,224,168)'/></g><g fill='rgb(255,107,61)'><rect x='26' y='6' width='4' height='6' rx='1' transform='rotate(25 28 9)'/><rect x='96' y='12' width='4' height='6' rx='1' transform='rotate(-30 98 15)'/></g><rect x='62' y='26' width='4' height='6' rx='1' fill='rgb(255,255,255)' transform='rotate(40 64 29)'/></svg>") left top / 180px 40px repeat-x;
+  filter: drop-shadow(0 0 3px rgba(255, 58, 216, .4));
+}
+
+/* ---------- Adornos de la portada ---------- */
+.tema-portada { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.tema-portada > span { position: absolute; line-height: 0; }
+.tema-portada svg { display: block; width: 100%; height: auto; }
+
+/* Navidad: bolas colgando que se balancean */
+.tema-bola {
+  top: 0; left: var(--x);
+  width: clamp(26px, 3.2vw, 44px);
+  height: var(--l);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background: linear-gradient(rgba(255, 255, 255, .35), rgba(255, 255, 255, .35)) center top / 1px 100% no-repeat;
+  transform-origin: 50% 0;
+  animation: temaBalanceo var(--t) ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 8px rgba(255, 211, 107, .35));
+}
+.tema-bola svg { margin-bottom: -2px; }
+@keyframes temaBalanceo { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+
+/* Halloween: telarañas en las esquinas, araña colgando y calabazas encendidas */
+/* Por debajo de la cabecera, para no tapar el logo ni el menú */
+.tema-telarana { top: 60px; width: clamp(110px, 17vw, 230px); }
+.tema-telarana.tema-izq { left: 0; }
+.tema-telarana.tema-der { right: 0; transform: scaleX(-1); }
+.tema-arana {
+  top: 0; right: 13%;
+  width: clamp(26px, 2.6vw, 38px);
+  height: clamp(130px, 22vh, 220px);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background: linear-gradient(rgba(255, 255, 255, .4), rgba(255, 255, 255, .4)) center top / 1px 100% no-repeat;
+  transform-origin: 50% 0;
+  animation: temaArana 5s ease-in-out infinite alternate;
+}
+@keyframes temaArana { from { transform: scaleY(.82); } to { transform: scaleY(1); } }
+.tema-calabaza { bottom: 4%; width: clamp(58px, 8.5vw, 120px); filter: drop-shadow(0 0 14px rgba(255, 138, 31, .55)); }
+.tema-calabaza.tema-c1 { left: 4%; }
+.tema-calabaza.tema-c2 { left: calc(4% + clamp(46px, 7vw, 100px)); width: clamp(42px, 6vw, 84px); }
+.tema-calabaza.tema-c3 { right: 5%; transform: scaleX(-1); }
+.tema-cara { animation: temaVela 3.2s steps(1, end) infinite; }
+.tema-c2 .tema-cara { animation-delay: -1.1s; }
+@keyframes temaVela { 0%, 100% { opacity: 1; } 30% { opacity: .7; } 34% { opacity: 1; } 70% { opacity: .82; } }
+
+/* Carnaval: instrumentos de chirigota y comparsa en neón */
+.tema-neon svg { stroke: var(--neon-c, var(--leaf)); stroke-width: 2.6; filter: drop-shadow(0 0 4px var(--neon-c, var(--leaf))) drop-shadow(0 0 12px var(--neon-c, var(--leaf))); }
+.tema-guitarra { left: 5%; bottom: 6%; width: clamp(46px, 6vw, 84px); transform: rotate(-20deg); --neon-c: #ffd60a; }
+.tema-bombo { right: 5%; bottom: 7%; width: clamp(72px, 9vw, 130px); --neon-c: #2ec4ff; }
+.tema-guitarra svg, .tema-bombo svg { animation: temaNeon 7s steps(1, end) infinite; }
+.tema-bombo svg { animation-delay: -3s; }
+@keyframes temaNeon { 0%, 100% { opacity: 1; } 47% { opacity: .55; } 49% { opacity: 1; } 51% { opacity: .7; } 53% { opacity: 1; } }
+
+/* ---------- Pie: los mismos instrumentos en fila (Carnaval) ---------- */
+.tema-pie { display: flex; align-items: flex-end; justify-content: center; gap: clamp(1rem, 4vw, 2rem); margin-bottom: .4rem; }
+.tema-pie .tema-neon { display: block; line-height: 0; }
+.tema-pie svg { width: auto; height: 42px; }
+.tema-pie .tema-n0 { --neon-c: #ffd60a; }
+.tema-pie .tema-n1 { --neon-c: #2ec4ff; }
+.tema-pie .tema-n2 { --neon-c: #ff3ad8; }
+.tema-pie .tema-n3 { --neon-c: #2fe0a8; }
+.tema-pie .tema-n3 svg { height: 22px; }
+
+/* ---------- Partículas: nieve, papelillos y murciélagos ---------- */
+.tema-particulas { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
+.tema-particulas > i { position: absolute; top: 0; left: var(--x, 0); will-change: transform; }
+/* Equipos lentos (modo ligero de app.js) y "reducir movimiento": sin partículas */
+.fx-ligero .tema-particulas { display: none; }
+@media (prefers-reduced-motion: reduce) { .tema-particulas { display: none; } }
+
+.tema-nieve > i {
+  width: var(--s); height: var(--s);
+  border-radius: 50%;
+  background: #fff;
+  opacity: var(--o);
+  box-shadow: 0 0 6px rgba(255, 255, 255, .6);
+  animation: temaCae var(--t) linear var(--d) infinite;
+}
+@keyframes temaCae {
+  from { transform: translate3d(0, -4vh, 0); }
+  to { transform: translate3d(var(--v), 104vh, 0); }
+}
+
+.tema-papelillos > i {
+  width: var(--w); height: var(--h);
+  border-radius: 1px;
+  background: var(--c);
+  opacity: .85;
+  animation: temaPapelillo var(--t) linear var(--d) infinite;
+}
+@keyframes temaPapelillo {
+  from { transform: translate3d(0, -4vh, 0) rotate(0) rotateX(0); }
+  to { transform: translate3d(var(--v), 104vh, 0) rotate(var(--g)) rotateX(900deg); }
+}
+
+.tema-murcielagos > i {
+  left: 0; top: var(--y);
+  width: calc(58px * var(--s));
+  filter: drop-shadow(0 0 6px rgba(139, 61, 255, .55));
+  animation: temaVuelo var(--t) linear var(--d) infinite both;
+}
+.tema-murcielagos svg { display: block; width: 100%; height: auto; animation: temaAleteo .22s ease-in-out infinite alternate; }
+/* Cruzan en el primer 60 % de la animación y el resto esperan fuera de la pantalla */
+@keyframes temaVuelo {
+  0% { transform: translate3d(-12vw, 0, 0); }
+  30% { transform: translate3d(45vw, -5vh, 0); }
+  60%, 100% { transform: translate3d(112vw, 3vh, 0); }
+}
+@keyframes temaAleteo { to { transform: scaleY(.45); } }
+
+/* ---------- Móvil: adornos más discretos ---------- */
+@media (max-width: 700px) {
+  .tema-bola:nth-child(2), .tema-bola:nth-child(3) { display: none; }
+  .tema-calabaza.tema-c2 { display: none; }
+  .tema-arana { right: 8%; }
+  html[data-tema="carnaval"] .topbar::after { height: 30px; background-size: 135px 30px; }
+}
+
+/* Con el menú del móvil abierto, la tira de la cabecera no se pone encima */
+.topbar:has(.nav.open)::after { opacity: 0; }

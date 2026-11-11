@@ -72,3 +72,26 @@ test("gestión de RPPs persiste cambios concurrentes y conserva los códigos", a
     ]);
   });
 });
+
+test("RPPs: el nombre no se repite (sin distinguir mayúsculas), como en Supabase", async () => {
+  await conAlmacen(async (a) => {
+    await a.crearRpp({ nombre: "Laura" });
+    const otro = await a.crearRpp({ nombre: "Marcos" });
+    await assert.rejects(a.crearRpp({ nombre: "LAURA" }), { motivo: "nombre_repetido" });
+    await assert.rejects(a.actualizarRpp(otro.codigo, { nombre: "laura" }), { motivo: "nombre_repetido" });
+    // Cambiar solo las mayúsculas de su propio nombre sí se puede
+    assert.equal((await a.actualizarRpp(otro.codigo, { nombre: "MARCOS" })).nombre, "MARCOS");
+    assert.deepEqual((await a.rpps()).map((r) => r.nombre), ["Laura", "MARCOS"]);
+  });
+});
+
+test("recuento de reservas por noche", async () => {
+  await conAlmacen(async (a) => {
+    const r = (fecha, telefono) => a.crearReserva({ fecha, tipo: "pista", nombre: "Ana Ruiz", telefono, personas: 2, rpp: null, notas: "", total: 50, aConsultar: false }, []);
+    await r("2026-10-14", "+34600000001");
+    await r("2026-10-14", "+34600000002");
+    await r("2026-10-15", "+34600000003");
+    const cuenta = Object.fromEntries((await a.recuentoReservas()).map((x) => [x.fecha, x.total]));
+    assert.deepEqual(cuenta, { "2026-10-14": 2, "2026-10-15": 1 });
+  });
+});

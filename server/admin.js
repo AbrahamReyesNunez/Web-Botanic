@@ -143,13 +143,23 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
     return typeof nombre === "string" && nombre.trim().length > 0 && nombre.trim().length <= 60 && !/[\u0000-\u001f\u007f]/.test(nombre);
   }
 
+  /* El almacén avisa de un nombre ya usado (en Supabase, el índice rpps_nombre_unico); otros errores siguen su curso */
+  function nombreRepetido(e) {
+    if (e && e.motivo === "nombre_repetido") return { status: 409, cuerpo: { ok: false, error: e.message } };
+    throw e;
+  }
+
   async function crearRpp(datos) {
     if (!datos || !validarNombreRpp(datos.nombre)) {
       return { status: 400, cuerpo: { ok: false, error: "El nombre del RPP debe tener entre 1 y 60 caracteres." } };
     }
     // El código (el de los links) lo genera el almacén; en Supabase, la propia base de datos
-    const rpp = await almacen.crearRpp({ nombre: datos.nombre.trim() });
-    return { status: 201, cuerpo: { ok: true, rpp } };
+    try {
+      const rpp = await almacen.crearRpp({ nombre: datos.nombre.trim() });
+      return { status: 201, cuerpo: { ok: true, rpp } };
+    } catch (e) {
+      return nombreRepetido(e);
+    }
   }
 
   async function actualizarRpp(codigo, datos = {}) {
@@ -167,7 +177,8 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
       cambios.activo = datos.activo;
     }
     if (!Object.keys(cambios).length) return { status: 400, cuerpo: { ok: false, error: "No hay cambios válidos." } };
-    const rpp = await almacen.actualizarRpp(codigo, cambios);
+    let rpp;
+    try { rpp = await almacen.actualizarRpp(codigo, cambios); } catch (e) { return nombreRepetido(e); }
     return rpp
       ? { status: 200, cuerpo: { ok: true, rpp } }
       : { status: 404, cuerpo: { ok: false, error: "RPP no encontrado." } };

@@ -15,7 +15,7 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { reservaDeFila } = require("./almacen-supabase.js");
+const { reservaDeFila, errorNombreRepetido } = require("./almacen-supabase.js");
 
 const MESAS_POR_DEFECTO = { pista: 30, vip: 7 };
 const ACTIVAS = new Set(["pendiente", "confirmada"]);
@@ -71,9 +71,14 @@ function crearAlmacen(dir) {
   }
 
   /* Sin código se genera uno como en Supabase (nuevo_codigo_rpp): 8 caracteres hexadecimales */
+  /* Mismo nombre sin distinguir mayúsculas, como el índice rpps_nombre_unico de Supabase */
+  const nombreOcupado = (lista, nombre, salvo) =>
+    lista.some((x) => x.codigo !== salvo && String(x.nombre).toLowerCase() === nombre.toLowerCase());
+
   function crearRpp({ codigo, nombre }) {
     return actualizarRpps((lista) => {
       if (codigo && lista.some((x) => x.codigo === codigo)) throw new Error("Ya existe un RPP con ese código.");
+      if (nombreOcupado(lista, nombre)) throw errorNombreRepetido();
       while (!codigo || lista.some((x) => x.codigo === codigo)) codigo = crypto.randomBytes(4).toString("hex");
       const nuevo = { codigo, nombre, activo: true };
       lista.push(nuevo);
@@ -85,6 +90,7 @@ function crearAlmacen(dir) {
     return actualizarRpps((lista) => {
       const indice = lista.findIndex((x) => x.codigo === codigo);
       if (indice < 0) return null;
+      if (cambios.nombre !== undefined && nombreOcupado(lista, cambios.nombre, codigo)) throw errorNombreRepetido();
       lista[indice] = { ...lista[indice], ...cambios };
       return lista[indice];
     });

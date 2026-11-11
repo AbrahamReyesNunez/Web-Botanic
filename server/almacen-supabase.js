@@ -18,6 +18,13 @@ const GRUPOS = ["botellas", "refrescos", "chupitos", "champan", "suplementos"];
 const CAMPOS_RESERVA = "id, fecha, tipo, estado, nombre, telefono, personas, rpp, total, a_consultar, notas, creado, decidido, "
   + "reserva_lineas(grupo, producto, cantidad, precio)";
 
+/* Dos RPPs no pueden llamarse igual (sin distinguir mayúsculas): el panel lo muestra como 409 */
+function errorNombreRepetido() {
+  const e = new Error("Ya hay un RPP con ese nombre.");
+  e.motivo = "nombre_repetido";
+  return e;
+}
+
 /* Fila de la base de datos → reserva con las bebidas agrupadas como las usa el servidor */
 function reservaDeFila({ a_consultar, reserva_lineas: lineas, notas, ...fila }) {
   const reserva = { ...fila, notas: notas || "", aConsultar: a_consultar };
@@ -98,7 +105,19 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     return filas.map(reservaDeFila);
   }
 
+  /* Reservas por noche. Las cuenta la base de datos (006_recuento_reservas.sql); si aún no
+     tiene esa función, se cuentan aquí como antes para que el panel no deje de funcionar */
+  let avisoRecuento = false;
   async function recuentoReservas() {
+    const { data, error } = await db.rpc("recuento_reservas");
+    if (!error) return data.map((x) => ({ fecha: x.fecha, total: Number(x.total) }));
+    if (!/recuento_reservas/.test(error.message) || !/schema cache|does not exist|Could not find/i.test(error.message)) {
+      throw new Error(`Supabase (recuento de reservados): ${error.message}`);
+    }
+    if (!avisoRecuento) {
+      avisoRecuento = true;
+      console.warn("  Falta la migración 006_recuento_reservas.sql en Supabase: las reservas se cuentan en el servidor (más lento).");
+    }
     const filas = [];
     for (let desde = 0; ; desde += PAGINA) {
       const pagina = datosDe(
@@ -130,9 +149,15 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     return filas.length > 0;
   }
 
+  /* Nombre repetido (índice rpps_nombre_unico de 002_mejoras_rpps.sql): error con motivo para el panel */
+  const datosRpp = (r, que) => {
+    if (r.error && r.error.code === "23505" && /rpps_nombre_unico/.test(r.error.message)) throw errorNombreRepetido();
+    return datosDe(r, que);
+  };
+
   /* Sin código, lo genera la base de datos (nuevo_codigo_rpp) */
   async function crearRpp({ codigo, nombre }) {
-    const fila = datosDe(await db.from("rpps").insert(codigo ? { codigo, nombre } : { nombre }).select("codigo, nombre, activo").single(), "crear RPP");
+    const fila = datosRpp(await db.from("rpps").insert(codigo ? { codigo, nombre } : { nombre }).select("codigo, nombre, activo").single(), "crear RPP");
     invalidarRpps();
     return fila;
   }
@@ -182,7 +207,7 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
   }
 
   async function actualizarRpp(codigo, cambios) {
-    const filas = datosDe(await db.from("rpps").update(cambios).eq("codigo", codigo).select("codigo, nombre, activo"), "actualizar RPP");
+    const filas = datosRpp(await db.from("rpps").update(cambios).eq("codigo", codigo).select("codigo, nombre, activo"), "actualizar RPP");
     invalidarRpps();
     return filas[0] || null;
   }
@@ -208,4 +233,4 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
   };
 }
 
-module.exports = { crearAlmacenSupabase, reservaDeFila };
+module.exports = { crearAlmacenSupabase, reservaDeFila, errorNombreRepetido };

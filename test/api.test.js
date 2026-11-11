@@ -216,6 +216,13 @@ test("panel admin: crea, edita, desactiva y reactiva RPPs con enlaces estables",
 
     assert.equal((await enviar(`/api/admin/rpp/${rpp.codigo}`, "PATCH", { activo: true })).status, 200);
     assert.equal((await fetch(`${s.base}/api/rpp/${rpp.codigo}`)).status, 200);
+
+    // Nombre ya usado por otro RPP (sin distinguir mayúsculas): 409 con un mensaje claro, al crear y al renombrar
+    const repetido = await enviar("/api/admin/rpps", "POST", { nombre: "rpp EDITADO" });
+    assert.equal(repetido.status, 409);
+    assert.equal((await repetido.json()).error, "Ya hay un RPP con ese nombre.");
+    const { rpp: otro } = await (await enviar("/api/admin/rpps", "POST", { nombre: "Otro RPP" })).json();
+    assert.equal((await enviar(`/api/admin/rpp/${otro.codigo}`, "PATCH", { nombre: "RPP Editado" })).status, 409);
   } finally { await s.cerrar(); }
 });
 

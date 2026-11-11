@@ -142,3 +142,36 @@ test("API de reservas con Supabase: aforo completo, duplicado y alta", async () 
     fs.rmSync(datos, { recursive: true, force: true });
   }
 });
+
+test("recuento de reservas: lo cuenta la base de datos (006_recuento_reservas.sql)", async () => {
+  const cliente = clienteFalso({ rpc: () => ({ data: [{ fecha: "2026-10-14", total: "3" }], error: null }) });
+  assert.deepEqual(await crearAlmacenSupabase({ cliente }).recuentoReservas(), [{ fecha: "2026-10-14", total: 3 }]);
+  assert.equal(cliente.llamadas[0].rpc, "recuento_reservas");
+  assert.equal(cliente.llamadas.length, 1, "no descarga las reservas");
+});
+
+test("recuento de reservas sin la migración 006: se cuenta en el servidor y el panel sigue funcionando", async () => {
+  const cliente = clienteFalso({
+    tablas: { reservas: [{ fecha: "2026-10-14" }, { fecha: "2026-10-14" }, { fecha: "2026-10-15" }] },
+    rpc: () => ({ data: null, error: { message: "Could not find the function public.recuento_reservas without parameters in the schema cache" } })
+  });
+  const aviso = console.warn;
+  console.warn = () => {};
+  try {
+    const cuenta = Object.fromEntries((await crearAlmacenSupabase({ cliente }).recuentoReservas()).map((x) => [x.fecha, x.total]));
+    assert.deepEqual(cuenta, { "2026-10-14": 2, "2026-10-15": 1 });
+  } finally { console.warn = aviso; }
+  // Otros errores no se esconden
+  const roto = clienteFalso({ rpc: () => ({ data: null, error: { message: "permission denied for function recuento_reservas" } }) });
+  await assert.rejects(crearAlmacenSupabase({ cliente: roto }).recuentoReservas(), /permission denied/);
+});
+
+test("RPP con nombre repetido: el índice único de Supabase se traduce en un motivo para el panel", async () => {
+  const repetido = () => ({ data: null, error: { code: "23505", message: 'duplicate key value violates unique constraint "rpps_nombre_unico"' } });
+  const a = crearAlmacenSupabase({ cliente: clienteFalso({ tablas: { rpps: repetido } }) });
+  await assert.rejects(a.crearRpp({ nombre: "Laura" }), { motivo: "nombre_repetido", message: "Ya hay un RPP con ese nombre." });
+  await assert.rejects(a.actualizarRpp("aaaa1111", { nombre: "Laura" }), { motivo: "nombre_repetido" });
+  // Otra clave duplicada (p. ej. el código) no se disfraza de nombre repetido
+  const otro = crearAlmacenSupabase({ cliente: clienteFalso({ tablas: { rpps: () => ({ data: null, error: { code: "23505", message: 'duplicate key value violates unique constraint "rpps_pkey"' } }) } }) });
+  await assert.rejects(otro.crearRpp({ codigo: "aaaa1111", nombre: "Laura" }), (e) => !e.motivo && /rpps_pkey/.test(e.message));
+});

@@ -121,7 +121,7 @@ Supabase es una base de datos PostgreSQL en la nube con un panel web. Solo habla
 | `vista_reservas` | Vista para leer las reservas: pedido en texto, RPP y enlace de WhatsApp |
 | `web_contenido` | Lo que se edita en el panel de la web: eventos, días cambiados, ajustes de la galería (migración 005) y estilo de la época (sección `ajustes`, migración 006) |
 
-**Migraciones:** cada cambio de la base de datos es un archivo de `supabase/migrations/`. Se aplican **una vez y en orden**: Supabase → **SQL Editor → New query**, pega el archivo entero y pulsa **Run**. La tabla `migraciones` dice cuáles tiene ya tu base de datos. Para un cambio nuevo, crea el siguiente número (`007_….sql`); no edites los ya aplicados.
+**Migraciones:** cada cambio de la base de datos es un archivo de `supabase/migrations/`. Se aplican **una vez y en orden**: Supabase → **SQL Editor → New query**, pega el archivo entero y pulsa **Run**. La tabla `migraciones` dice cuáles tiene ya tu base de datos. Para un cambio nuevo, crea el siguiente número (`008_….sql`); no edites los ya aplicados.
 
 **Puesta en marcha (una vez por proyecto de Supabase):**
 1. Aplica las migraciones de `supabase/migrations/` en orden (001, 002…). La 001 también vale sobre una base de datos que ya tuviera el antiguo `schema.sql`: no pierde datos.

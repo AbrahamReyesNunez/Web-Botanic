@@ -143,14 +143,14 @@ test("API de reservas con Supabase: aforo completo, duplicado y alta", async () 
   }
 });
 
-test("recuento de reservas: lo cuenta la base de datos (006_recuento_reservas.sql)", async () => {
+test("recuento de reservas: lo cuenta la base de datos (007_recuento_reservas.sql)", async () => {
   const cliente = clienteFalso({ rpc: () => ({ data: [{ fecha: "2026-10-14", total: "3" }], error: null }) });
   assert.deepEqual(await crearAlmacenSupabase({ cliente }).recuentoReservas(), [{ fecha: "2026-10-14", total: 3 }]);
   assert.equal(cliente.llamadas[0].rpc, "recuento_reservas");
   assert.equal(cliente.llamadas.length, 1, "no descarga las reservas");
 });
 
-test("recuento de reservas sin la migración 006: se cuenta en el servidor y el panel sigue funcionando", async () => {
+test("recuento de reservas sin la migración 007: se cuenta en el servidor y el panel sigue funcionando", async () => {
   const cliente = clienteFalso({
     tablas: { reservas: [{ fecha: "2026-10-14" }, { fecha: "2026-10-14" }, { fecha: "2026-10-15" }] },
     rpc: () => ({ data: null, error: { message: "Could not find the function public.recuento_reservas without parameters in the schema cache" } })

@@ -1,8 +1,11 @@
 -- =========================================================
--- 006 · RECUENTO DE RESERVAS POR NOCHE (panel)
+-- 007 · RECUENTO DE RESERVAS POR NOCHE (panel)
 -- Igual que recuento_noches de la lista: la base de datos agrupa y
 -- devuelve una fila por noche, en vez de mandar todas las reservas
 -- al servidor para contarlas allí.
+-- Antes se llamaba 006_recuento_reservas (coincidía en número con
+-- 006_tema_web): si ya se aplicó con ese nombre, se puede volver a
+-- ejecutar sin problema y su registro antiguo se borra.
 -- Requiere 003. Se puede volver a ejecutar sin perder datos.
 -- =========================================================
 begin;
@@ -20,6 +23,7 @@ $$;
 revoke execute on function public.recuento_reservas() from public, anon, authenticated;
 grant execute on function public.recuento_reservas() to service_role;
 
-insert into public.migraciones (nombre) values ('006_recuento_reservas') on conflict (nombre) do nothing;
+delete from public.migraciones where nombre = '006_recuento_reservas';
+insert into public.migraciones (nombre) values ('007_recuento_reservas') on conflict (nombre) do nothing;
 
 commit;

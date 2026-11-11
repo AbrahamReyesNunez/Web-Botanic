@@ -105,7 +105,7 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     return filas.map(reservaDeFila);
   }
 
-  /* Reservas por noche. Las cuenta la base de datos (006_recuento_reservas.sql); si aún no
+  /* Reservas por noche. Las cuenta la base de datos (007_recuento_reservas.sql); si aún no
      tiene esa función, se cuentan aquí como antes para que el panel no deje de funcionar */
   let avisoRecuento = false;
   async function recuentoReservas() {
@@ -116,7 +116,7 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     }
     if (!avisoRecuento) {
       avisoRecuento = true;
-      console.warn("  Falta la migración 006_recuento_reservas.sql en Supabase: las reservas se cuentan en el servidor (más lento).");
+      console.warn("  Falta la migración 007_recuento_reservas.sql en Supabase: las reservas se cuentan en el servidor (más lento).");
     }
     const filas = [];
     for (let desde = 0; ; desde += PAGINA) {

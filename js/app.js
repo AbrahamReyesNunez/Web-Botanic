@@ -14,7 +14,7 @@
   const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
   const STORAGE_KEY = "botanic_lista";
 
-  const $ = (sel, ctx = document) => ctx.querySelector(sel);
+  const { $, esc } = window.BotanicDom;   // js/compartido/dom.js
   const el = (tag, attrs = {}, html = "") => {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -26,7 +26,6 @@
     if (html) n.innerHTML = html;
     return n;
   };
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   /* Contenido interno de los botones .btn (texto + flecha que aparece al pasar el ratón) */
   const btnHTML = (texto, flecha = "→") =>

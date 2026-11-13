@@ -6,8 +6,7 @@
 
   const CFG = window.BOTANIC_CONFIG || {};
   const GAL = CFG.galeria || {};
-  const $ = (sel, ctx = document) => ctx.querySelector(sel);
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const { $, esc } = window.BotanicDom;   // js/compartido/dom.js
 
   const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
   const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];

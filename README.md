@@ -24,7 +24,8 @@ index.html · admin.html          Web pública y panel de la web (eventos, días
 css/styles.css · css/admin.css   Estilos
 js/app.js                        Calendario, lista, galería, efectos
 js/admin.js                      Panel de la web
-js/compartido/                   Código que usan la web y el servidor
+js/compartido/                   Código compartido (web, panel y servidor)
+  dom.js                         $ y esc() de la web y el panel
   calendario.js                  Días de apertura y cierre de lista
   nombre.js                      Filtro y normalización de nombres
   reservas.js                    Precios, buscador y teléfono de las reservas

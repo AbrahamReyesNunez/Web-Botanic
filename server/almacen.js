@@ -122,14 +122,15 @@ function crearAlmacen(dir) {
   const deNoche = (fecha) => inscripciones.filter((x) => x.fecha === fecha);
 
   /* Node atiende una petición cada vez, así que comprobar e insertar aquí es atómico */
-  async function anadir({ fecha, nombre, clave, rpp }, topes = {}) {
+  /* Los topes antes que los duplicados, como en Supabase (009): con la noche llena la respuesta no dice si el nombre está */
+  async function anadir({ fecha, nombre, clave, rpp, origen = null }, topes = {}) {
     const noche = deNoche(fecha);
-    if (noche.some((x) => x.clave === clave)) return { ok: false, motivo: "duplicado" };
     if (topes.maxPorNoche && noche.length >= topes.maxPorNoche) return { ok: false, motivo: "noche_llena" };
     if (rpp && topes.maxPorRppNoche && noche.filter((x) => x.rpp === rpp).length >= topes.maxPorRppNoche) {
       return { ok: false, motivo: "rpp_lleno" };
     }
-    const nueva = { id: crypto.randomUUID(), fecha, nombre, clave, rpp, creado: new Date().toISOString() };
+    if (noche.some((x) => x.clave === clave)) return { ok: false, motivo: "duplicado" };
+    const nueva = { id: crypto.randomUUID(), fecha, nombre, clave, rpp, origen, creado: new Date().toISOString() };
     inscripciones.push(nueva);
     await guardar();
     return { ok: true, inscripcion: nueva };

@@ -34,9 +34,27 @@ function crearLimitador(ventanas) {
     const marcas = registros.get(clave) || [];
     marcas.push(ahora);
     registros.set(clave, marcas);
+    return ahora;
   }
 
-  return { comprobar, anotar, cerrar: () => clearInterval(temporizador) };
+  /* Comprueba y apunta a la vez, antes de cualquier espera: si se comprobara aquí y se apuntara
+     después de esperar a la base de datos, varias peticiones simultáneas pasarían todas la comprobación.
+     Devuelve { ok, marca } para devolver el hueco con liberar() si al final no se hace */
+  function reservar(clave, ahora = Date.now()) {
+    const r = comprobar(clave, ahora);
+    if (!r.ok) return r;
+    return { ok: true, marca: anotar(clave, ahora) };
+  }
+
+  function liberar(clave, marca) {
+    const marcas = registros.get(clave);
+    if (!marcas) return;
+    const i = marcas.lastIndexOf(marca);
+    if (i !== -1) marcas.splice(i, 1);
+    if (!marcas.length) registros.delete(clave);
+  }
+
+  return { comprobar, anotar, reservar, liberar, cerrar: () => clearInterval(temporizador) };
 }
 
 module.exports = { crearLimitador };

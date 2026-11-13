@@ -35,7 +35,7 @@
   const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
   /* ---------------- Fechas (js/compartido/calendario.js, igual que el servidor) ---------------- */
-  const { keyOf, fromKey, addDays, today, isOpen, horarioDe, listaAbierta, proximasNoches } = window.BotanicCalendario;
+  const { keyOf, fromKey, addDays, today, isOpen, horarioDe, listaAbierta, listaDisponible, aperturaLista, proximasNoches } = window.BotanicCalendario;
 
   const fechaLarga = (d) => `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 
@@ -430,7 +430,7 @@
       card.appendChild(el("div", { class: "week-meta" },
         `<span class="week-day">${esc(fechaLarga(d))}</span>
          <span class="week-title">${esc(n.titulo)}</span>
-         <span class="week-cta">${listaAbierta(d) ? "Apúntate a la lista →" : "Ver noche →"}</span>`));
+         <span class="week-cta">${listaDisponible(d) ? "Apúntate a la lista →" : "Ver noche →"}</span>`));
       card.addEventListener("click", () => abrirDia(d, true));
       item.appendChild(card);
       strip.appendChild(item);
@@ -631,6 +631,10 @@
       box.innerHTML = `<h4>Lista</h4><p class="list-closed">${pasado
         ? "Esta noche ya pasó. ¡Te esperamos en la próxima!"
         : "La lista de hoy ya está cerrada. Puedes venir igualmente a la puerta o escribirnos por WhatsApp."}</p>`;
+      return box;
+    }
+    if (!listaDisponible(d)) {
+      box.innerHTML = `<h4>Lista</h4><p class="list-closed">La lista de esta noche se abre el ${esc(fechaLarga(aperturaLista(d)).toLowerCase())}.</p>`;
       return box;
     }
 
@@ -1992,7 +1996,7 @@
     // Botones "Apúntate a la lista": abren la próxima noche con lista abierta
     document.querySelectorAll("[data-ir-proxima]").forEach((a) => {
       a.addEventListener("click", (e) => {
-        const [d] = proximasNoches(1, true);
+        const [d] = proximasNoches(1, listaDisponible);
         if (!d) return;
         e.preventDefault();
         abrirDia(d, true);
@@ -2030,7 +2034,7 @@
     if (!location.hash && (params.has("reserva") || params.has("rpp"))) {
       window.addEventListener("load", () => {
         const comportamiento = reducedMotion ? "auto" : "smooth";
-        const [proxima] = proximasNoches(1, true);
+        const [proxima] = proximasNoches(1, listaDisponible);
         if (params.has("reserva")) return $("#reservados").scrollIntoView({ behavior: comportamiento });
         if (!proxima) return $("#agenda").scrollIntoView({ behavior: comportamiento });
         abrirDia(proxima, false);

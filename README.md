@@ -59,7 +59,7 @@ Todo lo que el navegador tiene que poder descargar va en `public/`; lo demás (`
   - Sin link queda en **"Sin RPP"**, así nadie puede asignarse un RPP a mano.
 - **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, escribe solo su `nombre` (el `codigo` del link se genera solo y no puede haber dos RPP con el mismo nombre). Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
 - **Ver la lista:** en Supabase → **Table Editor** (`inscripciones` por noche y RPP). La API de administración de lista, RPPs y reservas (`/api/admin/noches`, `resumen`, `reservas`, `rpps`, `rpp/:codigo` e `inscripcion/:id`) no tiene pantalla en la web: se mantiene para la futura app móvil.
-- La lista de un día se cierra a las 23:00 de ese día (`cierreListaHora` en `public/data/config.js`, hora de Madrid).
+- La lista de una noche se abre **7 días antes** (`lista.diasAntelacion`) y se cierra a las 23:00 de ese día (`cierreListaHora`), los dos en `public/data/config.js`, hora de Madrid.
 
 ### Protección contra abusos
 | Capa | Qué hace |
@@ -67,8 +67,9 @@ Todo lo que el navegador tiene que poder descargar va en `public/`; lo demás (`
 | Filtro de nombre | Pide nombre y apellido. Solo letras, máximo 40 caracteres y 5 palabras. Rechaza tecleo aleatorio, letras repetidas, insultos y nombres de broma. Normaliza mayúsculas. |
 | Token de formulario | Firmado por el servidor; no vale si se envía en menos de 3 s ni pasadas 2 h. |
 | Campo trampa | Campo oculto que solo rellenan los bots: se responde "ok" y no se guarda nada. |
-| Límites por IP | 5 altas cada 10 min, 15 al día y 20 intentos cada 10 min. Login del panel: 5 intentos cada 15 min. |
-| Duplicados y topes | El mismo nombre no puede repetirse en una noche. Topes por noche y por RPP en `public/data/config.js`. En Supabase se comprueban dentro de la base de datos, así que dos altas simultáneas no se los saltan. |
+| Límites por IP | 5 altas cada 10 min, 15 al día, 5 por noche y 20 intentos cada 10 min. Login del panel: 5 intentos cada 15 min. Los huecos se cogen antes de esperar a la base de datos, así que muchas peticiones a la vez no se los saltan. |
+| Duplicados y topes | El mismo nombre no puede repetirse en una noche; si ya está, se responde igual que a un alta nueva (sin guardarla), para que la lista no sirva para averiguar quién va. Topes por noche y por RPP en `public/data/config.js`, comprobados antes que los duplicados. En Supabase se comprueban dentro de la base de datos, así que dos altas simultáneas no se los saltan. |
+| Huella del origen | Cada alta guarda una huella de la IP (`origen`, migración 009), no la IP. Para quitar de golpe las altas de un abuso: Supabase → SQL Editor → `delete from inscripciones where fecha = 'AAAA-MM-DD' and origen = '…';`. Se borra a los 30 días con el resto de datos personales. Con `FORM_SECRET` fijo en `.env`, la misma IP da la misma huella aunque se reinicie el servidor. |
 | Servidor | Cuerpo máximo de 1 KB (8 KB en reservas), solo JSON y campos conocidos. Cabeceras de seguridad (CSP…). Los archivos internos no se sirven. |
 
 ## Reservas

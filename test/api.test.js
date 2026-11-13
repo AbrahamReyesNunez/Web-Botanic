@@ -83,11 +83,43 @@ test("RPP: link público válido, inválido e inactivo", async () => {
   } finally { await s.cerrar(); }
 });
 
-test("duplicados en la misma noche (sin importar tildes ni mayúsculas)", async () => {
+test("duplicados en la misma noche: no se guardan, pero la respuesta es la misma que la de un alta nueva (E8)", async () => {
   const s = await arrancar();
   try {
-    assert.equal((await inscribir(s.base, { nombre: "José Pérez" })).status, 201);
-    assert.equal((await inscribir(s.base, { nombre: "JOSE perez", rpp: "bbbb2222" })).status, 409);
+    const nueva = await inscribir(s.base, { nombre: "José Pérez" });
+    const repetida = await inscribir(s.base, { nombre: "JOSE perez" });
+    assert.equal(nueva.status, 201);
+    assert.equal(repetida.status, 201);
+    assert.deepEqual(Object.keys(repetida.j).sort(), Object.keys(nueva.j).sort());
+    await s.servidor.almacen.esperar();
+    assert.equal(guardadas(s).length, 1);
+  } finally { await s.cerrar(); }
+});
+
+test("la lista de una noche se abre 7 días antes (E5)", async () => {
+  const s = await arrancar();
+  try {
+    // AHORA es el 14/10/2026 (miércoles): el 21 (miércoles, 7 días) ya tiene lista; el 22 (jueves, 8 días) todavía no
+    assert.equal((await inscribir(s.base, { fecha: "2026-10-21", nombre: "Ana Ruiz" })).status, 201);
+    const lejos = await inscribir(s.base, { fecha: "2026-10-22", nombre: "Ana Ruiz" });
+    assert.equal(lejos.status, 400);
+    assert.match(lejos.j.error, /aún no está abierta/);
+  } finally { await s.cerrar(); }
+});
+
+test("como mucho 5 altas por IP y noche, y sin carreras: 20 a la vez no se saltan los límites (E5, E6)", async () => {
+  const s = await arrancar();
+  try {
+    const nombres = ["Ana Ruiz", "Luis Mora", "Eva Sanz", "Ines Vega", "Pablo Gil", "Marta Diaz", "Juan Leon", "Rosa Mena",
+      "Hugo Pardo", "Lola Cano", "Raul Soto", "Nuria Gallo", "Ivan Rey", "Sara Ortiz", "Dani Prieto", "Carla Pena",
+      "Mario Vidal", "Alba Ramos", "Sergio Luna", "Elena Ruiz"];
+    const r = await Promise.all(nombres.map((nombre) => inscribir(s.base, { nombre })));
+    assert.equal(r.filter((x) => x.status === 201).length, 5);
+    assert.ok(r.filter((x) => x.status === 429).length >= 15);
+    await s.servidor.almacen.esperar();
+    assert.equal(guardadas(s).length, 5);
+    // Cada alta guarda la huella del origen, no la IP
+    assert.ok(guardadas(s).every((x) => typeof x.origen === "string" && x.origen.length >= 20 && !x.origen.includes("127.0.0.1")));
   } finally { await s.cerrar(); }
 });
 

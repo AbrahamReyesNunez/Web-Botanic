@@ -48,6 +48,7 @@ window.BOTANIC_CONFIG = {
   /* Topes de la lista (los aplica el servidor para que un ataque no pueda llenarla) */
   lista: {
     maxPorNoche: 1500,      // inscripciones totales por noche
-    maxPorRppNoche: 300     // inscripciones por RPP y noche
+    maxPorRppNoche: 300,    // inscripciones por RPP y noche
+    diasAntelacion: 7       // la lista de una noche se abre estos días antes
   }
 };

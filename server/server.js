@@ -147,8 +147,12 @@ function crearServidor(opciones = {}) {
   const almacen = opciones.supabase
     ? crearAlmacenSupabase(opciones.supabase)
     : crearAlmacen(opciones.datos || path.join(RAIZ, "data", "db"));
-  const tokens = crearTokens({ secreto: opciones.secreto || crypto.randomBytes(32), ...opciones.tokens });
-  const lista = crearLista({ almacen, cal, cfg, tokens });
+  const secreto = opciones.secreto || crypto.randomBytes(32);
+  const tokens = crearTokens({ secreto, ...opciones.tokens });
+  // Huella de la IP para cada alta de la lista: con FORM_SECRET fijo, la misma IP da la misma huella
+  // entre reinicios; sin la clave no se puede volver a la IP
+  const huella = (ip) => crypto.createHmac("sha256", secreto).update(`origen:${ip}`).digest("base64url").slice(0, 22);
+  const lista = crearLista({ almacen, cal, cfg, tokens, huella });
   const reservas = crearReservas({ almacen, cal, cat: leerDatosWeb("reservados.js", "BOTANIC_RESERVADOS"), tokens });
   const admin = crearAdmin({ almacen, cal, claveAdmin: opciones.claveAdmin });
   const drive = opciones.drive || crearDrive({ url: (cfg.galeria || {}).scriptUrl, clave: opciones.driveClave });

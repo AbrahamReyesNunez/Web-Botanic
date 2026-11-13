@@ -145,16 +145,21 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     return [...cuenta].map(([fecha, total]) => ({ fecha, total }));
   }
 
-  /* Duplicados y topes se comprueban dentro de la base de datos, en la misma transacción */
-  async function anadir({ fecha, nombre, clave, rpp }, topes = {}) {
-    return datosDe(await db.rpc("inscribir", {
+  /* Duplicados y topes se comprueban dentro de la base de datos, en la misma transacción.
+     origen: huella de la IP (columna de la migración 009); sin la 009 se inscribe sin ella */
+  async function anadir({ fecha, nombre, clave, rpp, origen = null }, topes = {}) {
+    const params = {
       p_fecha: fecha,
       p_nombre: nombre,
       p_clave: clave,
       p_rpp: rpp,
       p_max_noche: topes.maxPorNoche || 0,
       p_max_rpp: topes.maxPorRppNoche || 0
-    }), "inscribir");
+    };
+    const r = await db.rpc("inscribir", { ...params, p_origen: origen });
+    if (!r.error || !faltaFuncion(r.error, "inscribir")) return datosDe(r, "inscribir");
+    avisar("Falta la migración 009_lista_origen.sql en Supabase: las altas se guardan sin la huella del origen.");
+    return datosDe(await db.rpc("inscribir", params), "inscribir");
   }
 
   async function borrar(id) {

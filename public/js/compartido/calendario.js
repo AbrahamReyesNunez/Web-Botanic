@@ -56,14 +56,27 @@
     return true;
   }
 
-  function proximasNoches(n, soloConLista = false) {
+  /* La lista de una noche se abre unos días antes (data/config.js → lista.diasAntelacion).
+     Con poca antelación, nadie puede ir llenando una noche lejana poco a poco */
+  const diasAntelacion = () => (cfg.lista && cfg.lista.diasAntelacion) || 7;
+  const aperturaLista = (d) => addDays(d, -diasAntelacion());
+
+  /* ¿Se puede apuntar ya, y todavía, a la lista de ese día? */
+  function listaDisponible(d) {
+    return listaAbierta(d) && d <= addDays(today(), diasAntelacion());
+  }
+
+  /* Próximas n noches abiertas. filtro: true = que aún admitan lista o reservas (no han pasado);
+     o una función, p. ej. listaDisponible para las que ya tienen la lista abierta */
+  function proximasNoches(n, filtro = false) {
+    const valida = filtro === true ? listaAbierta : (typeof filtro === "function" ? filtro : () => true);
     const out = [];
     let d = today();
     for (let i = 0; i < 120 && out.length < n; i++, d = addDays(d, 1)) {
-      if (isOpen(d) && (!soloConLista || listaAbierta(d))) out.push(d);
+      if (isOpen(d) && valida(d)) out.push(d);
     }
     return out;
   }
 
-  return { pad, keyOf, fromKey, startOfDay, addDays, today, esClaveValida, isOpen, abiertoPorConfig, horarioDe, listaAbierta, proximasNoches };
+  return { pad, keyOf, fromKey, startOfDay, addDays, today, esClaveValida, isOpen, abiertoPorConfig, horarioDe, listaAbierta, listaDisponible, aperturaLista, proximasNoches };
 });

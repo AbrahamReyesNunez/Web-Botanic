@@ -135,8 +135,12 @@ button { font: inherit; color: inherit; }
 .section-lead { margin: 1rem 0 0; color: var(--muted); max-width: 60ch; font-size: 1.05rem; }
 .section-head { margin-bottom: 2.2rem; }
 
-/* ---------- Botones: borde neón giratorio ---------- */
+/* ---------- Botones: borde neón giratorio ----------
+   El borde es una capa (::after) con el degradado cónico que gira con transform: la mueve la GPU sin
+   repintar. (Animar --ang con @property obliga a repintar el botón en cada fotograma.)
+   El relleno oscuro es ::before, separado del borde por --borde; el botón recorta las dos capas */
 @keyframes spin { to { --ang: 360deg; } }
+@keyframes giro { to { transform: translate(-50%, -50%) rotate(1turn); } }
 @keyframes glowPulse {
   0%, 100% { box-shadow: 0 0 18px -6px rgba(255, 58, 216, .55); }
   50% { box-shadow: 0 0 30px -4px rgba(255, 58, 216, .85); }
@@ -144,17 +148,17 @@ button { font: inherit; color: inherit; }
 
 .btn {
   --btn-bg: #12070f;
+  --borde: 1.5px;
   position: relative;
   isolation: isolate;
   overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 52px;
-  padding: .85rem 1.7rem;
+  padding: calc(.85rem + var(--borde)) calc(1.7rem + var(--borde));
   border-radius: 999px;
-  border: 1.5px solid transparent;
-  background:
-    linear-gradient(var(--btn-bg), var(--btn-bg)) padding-box,
-    var(--ring) border-box;
+  border: 0;
+  background: none;
+  box-shadow: 0 0 24px -5px rgba(255, 58, 216, .7);
   color: #fff;
   font-family: var(--font-display);
   font-weight: 600;
@@ -164,22 +168,29 @@ button { font: inherit; color: inherit; }
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  animation: spin 4s linear infinite, glowPulse 3s ease-in-out infinite;
   transform: translate(var(--tx, 0px), var(--ty, 0px));
   transition: transform .3s var(--ease-out), color .3s;
 }
-/* Relleno que entra desde la izquierda al pasar el ratón */
+/* Borde: cuadrado con el degradado, más grande que la diagonal del botón, girando sobre su centro */
+.btn::after {
+  content: "";
+  position: absolute; left: 50%; top: 50%;
+  z-index: -2;
+  width: 150%; aspect-ratio: 1;
+  background: conic-gradient(var(--neon), var(--violet), var(--leaf), var(--neon));
+  transform: translate(-50%, -50%);
+  animation: giro 4s linear infinite;
+}
+/* Relleno oscuro; al pasar el ratón entra el degradado desde la izquierda y sale por la derecha */
 .btn::before {
   content: "";
-  position: absolute; inset: 0;
+  position: absolute; inset: var(--borde);
   z-index: -1;
   border-radius: inherit;
-  background: linear-gradient(110deg, var(--neon), var(--violet));
-  transform: scaleX(0);
-  transform-origin: right;
-  transition: transform .5s var(--ease-out);
+  background: linear-gradient(110deg, var(--neon), var(--violet)) right / 0% 100% no-repeat, var(--btn-bg);
+  transition: background-size .5s var(--ease-out);
 }
-.btn:hover::before, .btn:focus-visible::before { transform: scaleX(1); transform-origin: left; }
+.btn:hover::before, .btn:focus-visible::before { background-position: left; background-size: 100% 100%; }
 .btn-arrow {
   display: inline-block;
   width: 0;
@@ -192,27 +203,21 @@ button { font: inherit; color: inherit; }
 .btn:hover .btn-arrow, .btn:focus-visible .btn-arrow { width: 1.1em; margin-left: .7em; opacity: 1; transform: none; }
 .btn:active { transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(.96); }
 
-.btn-neon { --btn-bg: #2a0a26; border-width: 2px; }
+.btn-neon { --btn-bg: #2a0a26; --borde: 2px; }
 .btn-neon .btn-label { text-shadow: 0 0 10px rgba(255, 58, 216, .7); }
 
-.btn-ghost {
-  --btn-bg: #071511;
-  background:
-    linear-gradient(var(--btn-bg), var(--btn-bg)) padding-box,
-    linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,.22)) border-box;
-  animation: none;
+.btn-ghost { --btn-bg: #071511; box-shadow: none; }
+.btn-ghost::after { background: rgba(255,255,255,.22); animation: none; }
+.btn-ghost:hover::after, .btn-ghost:focus-visible::after {
+  background: conic-gradient(var(--neon), var(--violet), var(--leaf), var(--neon));
+  animation: giro 2.5s linear infinite;
 }
-.btn-ghost:hover, .btn-ghost:focus-visible {
-  background:
-    linear-gradient(var(--btn-bg), var(--btn-bg)) padding-box,
-    var(--ring) border-box;
-  animation: spin 2.5s linear infinite;
-}
-.btn-ghost::before { background: linear-gradient(110deg, rgba(255,58,216,.22), rgba(47,224,168,.18)); }
+.btn-ghost::before { background-image: linear-gradient(110deg, rgba(255,58,216,.22), rgba(47,224,168,.18)); }
 
-.btn-sm { min-height: 40px; padding: .5rem 1.15rem; font-size: .64rem; }
-.btn[disabled] { opacity: .5; cursor: not-allowed; animation: none; }
-.btn[disabled]::before { display: none; }
+.btn-sm { min-height: 40px; padding: calc(.5rem + var(--borde)) calc(1.15rem + var(--borde)); font-size: .64rem; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.btn[disabled]::after { animation: none; }
+.btn[disabled]::before { background-size: 0% 100%; }
 
 /* ---------- Cabecera ---------- */
 .topbar {
@@ -379,8 +384,8 @@ button { font: inherit; color: inherit; }
   line-height: 1;
   color: #fff;
   text-shadow: var(--glow);
-  /* steps: el parpadeo salta de golpe (como un neón real) y el text-shadow
-     se repinta solo en cada salto, no en cada fotograma */
+  /* steps: el parpadeo salta de golpe, como un neón real. Solo cambia la opacidad, que la mueve la GPU:
+     animar text-shadow obliga a recalcular la página en cada fotograma, aunque vaya a saltos */
   animation: flicker 6s steps(1, end) 2s infinite;
 }
 .neon-title .ch {
@@ -393,8 +398,8 @@ button { font: inherit; color: inherit; }
   to { opacity: 1; transform: none; filter: blur(0); }
 }
 @keyframes flicker {
-  0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; text-shadow: var(--glow); }
-  20%, 24%, 55% { opacity: .75; text-shadow: none; }
+  0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: .6; }
 }
 .hero-sub { margin: 0; font-size: clamp(1rem, 3.5vw, 1.2rem); color: #e7dcea; letter-spacing: .04em; }
 
@@ -1698,7 +1703,23 @@ img.rota { opacity: 0; }
   visibility: hidden;
   transition: opacity 1.5s ease, visibility 0s 1.5s;
 }
-.fx-ligero .btn { animation: none !important; }
+.fx-ligero .btn::after,
+.fx-ligero .neon-title { animation: none !important; }
+/* Sin aceleración por hardware, lo más caro es el desenfoque de fondo: en cada fotograma el procesador
+   desenfoca lo que hay detrás. En modo ligero no se desenfoca (esos fondos ya son casi opacos) */
+.fx-ligero .topbar.scrolled::before { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(5, 16, 13, .94); }
+.fx-ligero :is(.calendar, .res-modal, .res-barra) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Fondo de la portada sin filtro: brightness(.8) es lo mismo que un 20 % de negro por encima */
+.fx-ligero .hero-back {
+  filter: none;
+  background: linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)), var(--hojas-arriba) center top / cover no-repeat;
+}
+
+/* Animaciones en bucle en pausa: fuera de la pantalla (.fx-fuera en su sección, js/app.js initPausas)
+   y, en pantallas táctiles, mientras se desliza la página (html.fx-desliza): así el scroll va fluido.
+   !important: el atajo animation de cada elemento (p. ej. .cal-day.next) vuelve a poner running */
+:is(.fx-fuera, .fx-desliza) :is(.beam, .neon-title, .scroll-hint span, .marquee-track, .week-tag, .cal-day, .gal-spinner, .res-opcion, .tema-portada *),
+:is(.fx-fuera, .fx-desliza) .btn::after { animation-play-state: paused !important; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

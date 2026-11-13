@@ -39,10 +39,22 @@ function pedir(url, cabeceras = {}) {
   });
 }
 
+/* La ruta tal cual, sin que el cliente la normalice (new URL convierte /a/../b en /b) */
+function pedirCruda(base, ruta) {
+  const { hostname, port } = new URL(base);
+  return new Promise((resolve, reject) => {
+    http.request({ hostname, port, path: ruta }, (res) => {
+      const trozos = [];
+      res.on("data", (c) => trozos.push(c));
+      res.on("end", () => resolve({ status: res.statusCode, cuerpo: Buffer.concat(trozos) }));
+    }).on("error", reject).end();
+  });
+}
+
 test("los archivos de texto se comprimen con brotli o gzip según lo que acepte el navegador", async () => {
   const s = await arrancar();
   try {
-    const original = fs.readFileSync(path.join(RAIZ, "css", "styles.css"));
+    const original = fs.readFileSync(path.join(RAIZ, "public", "css", "styles.css"));
 
     const br = await pedir(`${s.base}/css/styles.css`, { "Accept-Encoding": "gzip, deflate, br" });
     assert.equal(br.status, 200);
@@ -120,6 +132,31 @@ test("la página 404 se sirve en HTML", async () => {
       const r = await fetch(`${s.base}/no/existe.html`);
       assert.equal(r.status, 404);
       assert.match(await r.text(), /<html/i);
+    }
+  } finally { await s.cerrar(); }
+});
+
+test("E1/E3: rutas raras no salen de public/ (barras invertidas, //, %2F, mayúsculas, puntos y espacios finales)", async () => {
+  const s = await arrancar();
+  try {
+    const rutas = [
+      "/%5C.env", "/%5c.env", "/..%5C.env", "/%5C..%5C.env", "/%2e%2e%5c.env", "/js/..%5C..%5C.env",
+      "/.env", "/.git/config", "/%2E%65nv",
+      "/data/db/rpps.json", "/data//db/rpps.json", "/%2Fdata/db/rpps.json", "//data/db/rpps.json",
+      "/server/server.js", "/SERVER/server.js", "/README.md", "/README.md/", "/package.json",
+      "/documentacion/", "/supabase/migrations/001_inicial.sql", "/public/index.html",
+      "/js/../../.env", "/js/%2e%2e/%2e%2e/.env", "/..%2f..%2fWindows/win.ini",
+      "/index.html.", "/index.html%20", "/index.html::$DATA", "/index.html%3A%3A$DATA",
+      "/js/", "/js/compartido", "/%00index.html", "/%E0%A4%A"
+    ];
+    for (const ruta of rutas) {
+      const r = await pedirCruda(s.base, ruta);
+      assert.equal(r.status, 404, ruta);
+      assert.doesNotMatch(r.cuerpo.toString("utf8"), /SUPABASE|ADMIN_KEY|"codigo"|crearServidor/, ruta);
+    }
+    // Lo público sigue funcionando
+    for (const ruta of ["/", "/index.html", "/admin.html", "/data/config.js", "/js/compartido/dom.js", "/img/brand/icono-48.png"]) {
+      assert.equal((await pedir(s.base + ruta)).status, 200, ruta);
     }
   } finally { await s.cerrar(); }
 });

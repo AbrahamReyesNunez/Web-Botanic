@@ -17,6 +17,10 @@ data/db/reservas.json
 data/db/contenido.json
 data/db/*.tmp
 .env
+.env.*
+!.env.example
+*.pem
+*.key
 node_modules/
 
 # Revisiones con detalles de seguridad: no se suben mientras haya fallos sin arreglar (el repo es público)

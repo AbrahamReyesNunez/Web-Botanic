@@ -1,6 +1,6 @@
 /* =========================================================
    GALERÍA: lista de álbumes de Google Drive, cacheada en el servidor
-   El Google Apps Script (data/config.js → galeria.scriptUrl) recorre todas
+   El Google Apps Script (public/data/config.js → galeria.scriptUrl) recorre todas
    las carpetas de Drive en cada llamada y tarda 2-3 s. El servidor lo llama
    como mucho cada `ttlMs` y sirve la copia a todos los visitantes en
    /api/galeria. Si Google falla, se sigue sirviendo la última copia.

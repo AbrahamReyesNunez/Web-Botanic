@@ -4,20 +4,20 @@
    límite por IP → tipo de mesa → fecha → nombre, teléfono, personas,
    RPP y comentarios → pedido (contra el catálogo) → aforo y teléfono
    repetido (en el almacén, en la misma transacción que el alta).
-   El total lo calcula el servidor con data/reservados.js: lo que mande el
+   El total lo calcula el servidor con public/data/reservados.js: lo que mande el
    navegador como precio no se usa.
    ========================================================= */
 "use strict";
 
-const BotanicNombre = require("../js/compartido/nombre.js");
-const Reservas = require("../js/compartido/reservas.js");
+const BotanicNombre = require("../public/js/compartido/nombre.js");
+const Reservas = require("../public/js/compartido/reservas.js");
+const crypto = require("node:crypto");
 const { crearLimitador } = require("./limites.js");
 
 const CAMPOS = new Set(["tipo", "fecha", "nombre", "telefono", "personas", "rpp", "notas", "carrito", "token", "web"]);
 const CAMPOS_LINEA = ["cantidad", "grupo", "nombre"];
 const RECHAZOS = {
   completo: "Ya no quedan mesas de este tipo para esa noche. Prueba otra noche u otro tipo de mesa.",
-  duplicado: "Ya hay una petición de reserva para esa noche con este teléfono. Si quieres cambiarla, escríbenos por WhatsApp.",
   tipo: "Ese tipo de mesa no está disponible."
 };
 const DIAS_VISTA_MAX = 60;       // hasta cuándo se puede pedir mesa
@@ -110,9 +110,21 @@ function crearReservas({ almacen, cal, cat, tokens }) {
 
     if (!tokens.valido(datos.token)) return error(400, "El formulario ha caducado. Recarga la página e inténtalo de nuevo.");
 
-    const limAlta = altas.comprobar(ip);
+    // El hueco del límite se coge ya, antes de esperar a la base de datos (si no, varias peticiones a la
+    // vez pasarían todas la comprobación), y se devuelve si la reserva no sale
+    const limAlta = altas.reservar(ip);
     if (!limAlta.ok) return demasiados(limAlta.esperar);
+    let hecho = false;
+    try {
+      const r = await crearValidada(datos);
+      hecho = r.status === 201;
+      return r;
+    } finally {
+      if (!hecho) altas.liberar(ip, limAlta.marca);
+    }
+  }
 
+  async function crearValidada(datos) {
     const { tipo, fecha } = datos;
     if (typeof tipo !== "string" || !tiene(cat.tipos || {}, tipo)) return error(400, "Tipo de mesa no válido.");
 
@@ -157,13 +169,17 @@ function crearReservas({ almacen, cal, cat, tokens }) {
       fecha, tipo, nombre: v.nombre, telefono, personas, rpp: rpp ? rpp.codigo : null,
       notas, total: r.total, aConsultar: r.aConsultar
     }, lineas);
+    // Teléfono que ya tiene reserva esa noche: se responde igual que a una reserva nueva (con una referencia
+    // cualquiera) y no se guarda, para que nadie pueda averiguar si un número ha reservado. El equipo ve la primera
+    if (!res.ok && res.motivo === "duplicado") {
+      return { status: 201, cuerpo: { ok: true, referencia: crypto.randomBytes(4).toString("hex").toUpperCase(), total: r.total, telefono } };
+    }
     if (!res.ok) {
       if (res.motivo === "completo") olvidarDisponibilidad();
       // "motivo" permite a la web reaccionar (p. ej. volver a elegir noche si se ha completado)
       return { status: 409, cuerpo: { ok: false, error: RECHAZOS[res.motivo] || "No se ha podido enviar la reserva.", motivo: res.motivo } };
     }
 
-    altas.anotar(ip);
     return { status: 201, cuerpo: { ok: true, referencia: res.id.slice(0, 8).toUpperCase(), total: r.total, telefono } };
   }
 

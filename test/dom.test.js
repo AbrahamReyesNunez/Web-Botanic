@@ -1,7 +1,7 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { esc } = require("../js/compartido/dom.js");
+const { esc } = require("../public/js/compartido/dom.js");
 
 test("esc escapa los caracteres especiales de HTML", () => {
   assert.equal(esc(`<a href="x" title='y'>R&B</a>`), "&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;R&amp;B&lt;/a&gt;");

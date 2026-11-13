@@ -97,3 +97,20 @@ test("recuento de reservas por noche", async () => {
     assert.deepEqual(cuenta, { "2026-10-14": 2, "2026-10-15": 1 });
   });
 });
+
+test("modo JSON: si falla una escritura, las siguientes se siguen guardando (P6)", async () => {
+  await conAlmacen(async (a, dir) => {
+    const archivo = path.join(dir, "inscripciones.json");
+    fs.mkdirSync(archivo);   // un directorio en su sitio: el rename falla, como con el archivo bloqueado
+    const errores = console.error;
+    console.error = () => {};
+    try {
+      await assert.rejects(a.anadir(alta("2026-10-14", "ana ruiz")));
+    } finally { console.error = errores; }
+    fs.rmSync(archivo, { recursive: true });
+    assert.equal((await a.anadir(alta("2026-10-14", "luis mora"))).ok, true);
+    await a.esperar();
+    const guardado = JSON.parse(fs.readFileSync(archivo, "utf8")).map((x) => x.clave).sort();
+    assert.deepEqual(guardado, ["ana ruiz", "luis mora"], "la escritura que sale bien guarda también lo pendiente");
+  });
+});

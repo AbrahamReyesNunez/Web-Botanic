@@ -120,10 +120,11 @@ test("API de reservas con Supabase: aforo completo, duplicado y alta", async () 
     assert.equal(r.status, 409);
     assert.equal(r.j.motivo, "completo");
 
+    // Teléfono que ya tenía reserva: misma respuesta que una nueva, para no revelarlo (E9)
     respuesta = { data: { ok: false, motivo: "duplicado" }, error: null };
     r = await reservar();
-    assert.equal(r.status, 409);
-    assert.match(r.j.error, /teléfono/);
+    assert.equal(r.status, 201);
+    assert.match(r.j.referencia, /^[0-9A-F]{8}$/);
 
     respuesta = { data: { ok: true, id: "6f1c2b9e-0000-4000-8000-000000000002" }, error: null };
     r = await reservar();
@@ -209,4 +210,28 @@ test("latido: una consulta mínima para que Supabase gratuito no pause el proyec
   // Si Supabase falla, el error sale (el servidor lo escribe en el registro)
   const caido = clienteFalso({ tablas: { migraciones: () => ({ data: null, error: { message: "project paused" } }) } });
   await assert.rejects(crearAlmacenSupabase({ cliente: caido }).latido(), /project paused/);
+});
+
+test("Supabase caído al arrancar: la lista y las reservas responden 503 en vez de aceptar noches cerradas (E11)", async () => {
+  const datos = fs.mkdtempSync(path.join(os.tmpdir(), "botanic-"));
+  const cliente = clienteFalso({ tablas: { rpps: [], web_contenido: () => ({ data: null, error: { message: "fetch failed" } }) } });
+  const errores = console.error;
+  console.error = () => {};
+  const servidor = crearServidor({ datos, claveAdmin: "x", ahora: () => new Date(2026, 9, 14, 12, 0, 0), tokens: { minMs: 0 }, supabase: { cliente } });
+  try {
+    await servidor.listo;
+    await new Promise((r) => servidor.listen(0, "127.0.0.1", r));
+    const base = `http://127.0.0.1:${servidor.address().port}`;
+    for (const ruta of ["/api/lista", "/api/reservas"]) {
+      const r = await fetch(`${base}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      assert.equal(r.status, 503, ruta);
+    }
+    // La web sigue sirviéndose
+    assert.equal((await fetch(`${base}/`)).status, 200);
+  } finally {
+    console.error = errores;
+    servidor.closeAllConnections();
+    await new Promise((r) => servidor.close(r));
+    fs.rmSync(datos, { recursive: true, force: true });
+  }
 });

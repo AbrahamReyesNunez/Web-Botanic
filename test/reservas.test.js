@@ -5,11 +5,11 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { buscar, precioDe, calcular, normalizarTelefono } = require("../js/compartido/reservas.js");
+const { buscar, precioDe, calcular, normalizarTelefono } = require("../public/js/compartido/reservas.js");
 
 // El catálogo real, tal y como lo carga la web
 const ctx = { window: {} };
-vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "data", "reservados.js"), "utf8"), ctx);
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "public", "data", "reservados.js"), "utf8"), ctx);
 const CAT = ctx.window.BOTANIC_RESERVADOS;
 
 const MIE = 3, JUE = 4, VIE = 5, SAB = 6, DOM = 0;

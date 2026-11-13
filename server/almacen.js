@@ -98,14 +98,18 @@ function crearAlmacen(dir) {
 
   const rppActivo = (codigo) => rpps().find((r) => r.codigo === codigo && r.activo !== false) || null;
 
+  /* Si una escritura falla (p. ej. el antivirus o OneDrive tienen el archivo bloqueado), quien la pidió recibe
+     el error, pero la cola sigue: antes se quedaba rechazada y no se volvía a guardar nada hasta reiniciar.
+     Cada escritura lleva la lista entera, así que la siguiente que salga bien guarda también lo pendiente */
   function guardarEn(archivo, lista) {
     const datos = JSON.stringify(lista, null, 2);
-    cola = cola.then(async () => {
+    const operacion = cola.then(async () => {
       const tmp = `${archivo}.${process.pid}.tmp`;
       await fsp.writeFile(tmp, datos, "utf8");
       await fsp.rename(tmp, archivo);
     });
-    return cola;
+    cola = operacion.catch((e) => console.error(`  ✘ No se pudo guardar ${path.basename(archivo)}: ${e.message}`));
+    return operacion;
   }
   const guardar = () => guardarEn(archivoInscripciones, inscripciones);
   const guardarReservas = () => guardarEn(archivoReservas, reservas);
@@ -122,14 +126,15 @@ function crearAlmacen(dir) {
   const deNoche = (fecha) => inscripciones.filter((x) => x.fecha === fecha);
 
   /* Node atiende una petición cada vez, así que comprobar e insertar aquí es atómico */
-  async function anadir({ fecha, nombre, clave, rpp }, topes = {}) {
+  /* Los topes antes que los duplicados, como en Supabase (009): con la noche llena la respuesta no dice si el nombre está */
+  async function anadir({ fecha, nombre, clave, rpp, origen = null }, topes = {}) {
     const noche = deNoche(fecha);
-    if (noche.some((x) => x.clave === clave)) return { ok: false, motivo: "duplicado" };
     if (topes.maxPorNoche && noche.length >= topes.maxPorNoche) return { ok: false, motivo: "noche_llena" };
     if (rpp && topes.maxPorRppNoche && noche.filter((x) => x.rpp === rpp).length >= topes.maxPorRppNoche) {
       return { ok: false, motivo: "rpp_lleno" };
     }
-    const nueva = { id: crypto.randomUUID(), fecha, nombre, clave, rpp, creado: new Date().toISOString() };
+    if (noche.some((x) => x.clave === clave)) return { ok: false, motivo: "duplicado" };
+    const nueva = { id: crypto.randomUUID(), fecha, nombre, clave, rpp, origen, creado: new Date().toISOString() };
     inscripciones.push(nueva);
     await guardar();
     return { ok: true, inscripcion: nueva };

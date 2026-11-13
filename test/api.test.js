@@ -83,11 +83,43 @@ test("RPP: link público válido, inválido e inactivo", async () => {
   } finally { await s.cerrar(); }
 });
 
-test("duplicados en la misma noche (sin importar tildes ni mayúsculas)", async () => {
+test("duplicados en la misma noche: no se guardan, pero la respuesta es la misma que la de un alta nueva (E8)", async () => {
   const s = await arrancar();
   try {
-    assert.equal((await inscribir(s.base, { nombre: "José Pérez" })).status, 201);
-    assert.equal((await inscribir(s.base, { nombre: "JOSE perez", rpp: "bbbb2222" })).status, 409);
+    const nueva = await inscribir(s.base, { nombre: "José Pérez" });
+    const repetida = await inscribir(s.base, { nombre: "JOSE perez" });
+    assert.equal(nueva.status, 201);
+    assert.equal(repetida.status, 201);
+    assert.deepEqual(Object.keys(repetida.j).sort(), Object.keys(nueva.j).sort());
+    await s.servidor.almacen.esperar();
+    assert.equal(guardadas(s).length, 1);
+  } finally { await s.cerrar(); }
+});
+
+test("la lista de una noche se abre 7 días antes (E5)", async () => {
+  const s = await arrancar();
+  try {
+    // AHORA es el 14/10/2026 (miércoles): el 21 (miércoles, 7 días) ya tiene lista; el 22 (jueves, 8 días) todavía no
+    assert.equal((await inscribir(s.base, { fecha: "2026-10-21", nombre: "Ana Ruiz" })).status, 201);
+    const lejos = await inscribir(s.base, { fecha: "2026-10-22", nombre: "Ana Ruiz" });
+    assert.equal(lejos.status, 400);
+    assert.match(lejos.j.error, /aún no está abierta/);
+  } finally { await s.cerrar(); }
+});
+
+test("como mucho 5 altas por IP y noche, y sin carreras: 20 a la vez no se saltan los límites (E5, E6)", async () => {
+  const s = await arrancar();
+  try {
+    const nombres = ["Ana Ruiz", "Luis Mora", "Eva Sanz", "Ines Vega", "Pablo Gil", "Marta Diaz", "Juan Leon", "Rosa Mena",
+      "Hugo Pardo", "Lola Cano", "Raul Soto", "Nuria Gallo", "Ivan Rey", "Sara Ortiz", "Dani Prieto", "Carla Pena",
+      "Mario Vidal", "Alba Ramos", "Sergio Luna", "Elena Ruiz"];
+    const r = await Promise.all(nombres.map((nombre) => inscribir(s.base, { nombre })));
+    assert.equal(r.filter((x) => x.status === 201).length, 5);
+    assert.ok(r.filter((x) => x.status === 429).length >= 15);
+    await s.servidor.almacen.esperar();
+    assert.equal(guardadas(s).length, 5);
+    // Cada alta guarda la huella del origen, no la IP
+    assert.ok(guardadas(s).every((x) => typeof x.origen === "string" && x.origen.length >= 20 && !x.origen.includes("127.0.0.1")));
   } finally { await s.cerrar(); }
 });
 
@@ -309,4 +341,65 @@ test("archivos privados y rutas con ../ no se sirven", async () => {
     assert.match(await perdida.text(), /Te has perdido/);
     assert.match((await fetch(`${s.base}/api/no-existe`)).headers.get("content-type"), /application\/json/);
   } finally { await s.cerrar(); }
+});
+
+test("un cuerpo JSON que no es un objeto (null, lista, número) recibe 400 y no deja la petición colgada (E10)", async () => {
+  const s = await arrancar();
+  try {
+    for (const cuerpo of ["null", "[]", "42", "\"texto\"", "true"]) {
+      for (const ruta of ["/api/lista", "/api/reservas", "/api/admin/login"]) {
+        const r = await fetch(`${s.base}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo, signal: AbortSignal.timeout(3000) });
+        assert.equal(r.status, 400, `${ruta} ${cuerpo}`);
+      }
+    }
+  } finally { await s.cerrar(); }
+});
+
+const login = (base, clave, cabeceras = {}) => fetch(`${base}/api/admin/login`, {
+  method: "POST", headers: { "Content-Type": "application/json", ...cabeceras }, body: JSON.stringify({ clave })
+});
+
+test("login del panel: solo cuentan los fallos y, con clave larga, la correcta entra aunque la IP esté bloqueada (P2)", async () => {
+  const fuerte = "una-clave-larga-de-prueba-123";
+  const s = await arrancar({ claveAdmin: fuerte });
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await login(s.base, fuerte)).status, 200, "entrar bien no gasta intentos");
+    for (let i = 0; i < 5; i++) assert.equal((await login(s.base, "mala")).status, 401);
+    assert.equal((await login(s.base, "mala")).status, 429);
+    assert.equal((await login(s.base, fuerte)).status, 200, "un atacante en la misma IP no deja fuera al equipo");
+  } finally { await s.cerrar(); }
+  // Con clave corta, el bloqueo vale también para la correcta (si no, se podría adivinar a base de intentos)
+  const d = await arrancar({ claveAdmin: "corta" });
+  try {
+    for (let i = 0; i < 5; i++) await login(d.base, "mala");
+    assert.equal((await login(d.base, "corta")).status, 429);
+  } finally { await d.cerrar(); }
+});
+
+test("sin clave del panel no arranca (antes valía la palabra \"undefined\")", () => {
+  assert.throws(() => crearServidor({ datos: fs.mkdtempSync(path.join(os.tmpdir(), "botanic-")) }), /ADMIN_KEY/);
+});
+
+test("detrás del proxy: cookie del panel con Secure y HSTS si se entra por https (P4)", async () => {
+  const s = await arrancar({ trustProxy: "local" });
+  try {
+    const r = await login(s.base, "clave-de-prueba", { "X-Forwarded-Proto": "https", "X-Forwarded-For": "203.0.113.9" });
+    assert.match(r.headers.get("set-cookie"), /; Secure/);
+    assert.equal(r.headers.get("strict-transport-security"), "max-age=31536000");
+  } finally { await s.cerrar(); }
+  // En local, sin proxy, ni Secure (no funcionaría por http) ni HSTS
+  const local = await arrancar();
+  try {
+    const r = await login(local.base, "clave-de-prueba");
+    assert.doesNotMatch(r.headers.get("set-cookie"), /Secure/);
+    assert.equal(r.headers.get("strict-transport-security"), null);
+  } finally { await local.cerrar(); }
+});
+
+test("límites por IP: las IPv6 se agrupan por /64 (P5)", () => {
+  const { claveIp } = require("../server/server.js");
+  assert.equal(claveIp("2001:db8:85a3:8d3:1319:8a2e:370:7348"), claveIp("2001:db8:85a3:8d3::1"));
+  assert.notEqual(claveIp("2001:db8:85a3:8d3::1"), claveIp("2001:db8:85a3:8d4::1"));
+  assert.equal(claveIp("::ffff:203.0.113.9"), "203.0.113.9");
+  assert.equal(claveIp("203.0.113.9"), "203.0.113.9");
 });

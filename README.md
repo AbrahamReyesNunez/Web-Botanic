@@ -15,20 +15,25 @@ npm test                    # pruebas del filtro de nombres, del almacén y de l
 
 Al arrancar, la consola dice dónde se guardan los datos: `Datos: Supabase` o `Datos: data/db (JSON)`.
 
-Si abres `index.html` directamente (sin servidor), la web se ve, pero la lista no puede enviar.
+Si abres `public/index.html` directamente (sin servidor), la web se ve, pero la lista no puede enviar.
 
 ## Estructura
 
 ```
-index.html · admin.html          Web pública y panel de la web (eventos, días y galería)
-css/styles.css · css/admin.css   Estilos
-js/app.js                        Calendario, lista, galería, efectos
-js/admin.js                      Panel de la web
-js/compartido/                   Código compartido (web, panel y servidor)
-  dom.js                         $ y esc() de la web y el panel
-  calendario.js                  Días de apertura y cierre de lista
-  nombre.js                      Filtro y normalización de nombres
-  reservas.js                    Precios, buscador y teléfono de las reservas
+public/                          Lo único que el servidor sirve a internet (la web)
+  index.html · admin.html        Web pública y panel de la web (eventos, días y galería)
+  css/styles.css · css/admin.css Estilos
+  js/app.js                      Calendario, lista, galería, efectos
+  js/admin.js                    Panel de la web
+  js/compartido/                 Código compartido (web, panel y servidor)
+    dom.js                       $ y esc() de la web y el panel
+    calendario.js                Días de apertura y cierre de lista
+    nombre.js                    Filtro y normalización de nombres
+    reservas.js                  Precios, buscador y teléfono de las reservas
+  data/config.js                 Horarios, contacto, días cerrados, topes y antelación de la lista, URL de la galería
+  data/reservados.js             Mesas, precios y bebidas de los reservados (con el dibujo de cada refresco)
+  data/eventos.js                Nombre por defecto de cada noche (los eventos se crean en el panel)
+  img/                           Logo y fondos (las portadas y las fotos de la galería están en Google Drive)
 server/                          Servidor (server.js, lista.js, reservas.js, admin.js, limites.js)
   formulario.js                  Token de seguridad de los formularios
   contenido.js                   Eventos, días y ajustes de galería del panel (/api/web.js)
@@ -38,15 +43,13 @@ server/                          Servidor (server.js, lista.js, reservas.js, adm
   almacen.js                     Datos en JSON (local y pruebas)
   comprobar-supabase.js          npm run comprobar-supabase
 supabase/migrations/             Cambios de la base de datos, numerados (001, 002…; 005: panel de la web)
-data/config.js                   Horarios, contacto, días cerrados, topes de la lista, URL de la galería
-data/reservados.js               Mesas, precios y bebidas de los reservados (con el dibujo de cada refresco)
-data/eventos.js                  Nombre por defecto de cada noche (los eventos se crean en el panel)
 google-apps-script/Codigo.gs     Código del Google Apps Script de la galería (se pega en Apps Script)
-data/db/                         Solo en modo JSON: rpps.json, mesas.json, inscripciones.json, reservas.json y contenido.json (las tres últimas no se suben)
+data/db/                         Solo en modo JSON (fuera de public/): rpps.json, mesas.json, inscripciones.json, reservas.json y contenido.json (las tres últimas no se suben)
                                  rpps.json trae RPP de prueba solo para desarrollo: los reales van en Supabase
-img/                             Logo y fondos (las portadas y las fotos de la galería están en Google Drive)
 test/                            Pruebas (node --test)
 ```
+
+Todo lo que el navegador tiene que poder descargar va en `public/`; lo demás (`.env`, `data/db`, el código del servidor, la documentación) nunca se sirve.
 
 ## Lista y RPPs
 
@@ -56,7 +59,7 @@ test/                            Pruebas (node --test)
   - Sin link queda en **"Sin RPP"**, así nadie puede asignarse un RPP a mano.
 - **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, escribe solo su `nombre` (el `codigo` del link se genera solo y no puede haber dos RPP con el mismo nombre). Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
 - **Ver la lista:** en Supabase → **Table Editor** (`inscripciones` por noche y RPP). La API de administración de lista, RPPs y reservas (`/api/admin/noches`, `resumen`, `reservas`, `rpps`, `rpp/:codigo` e `inscripcion/:id`) no tiene pantalla en la web: se mantiene para la futura app móvil.
-- La lista de un día se cierra a las 23:00 de ese día (`cierreListaHora` en `data/config.js`, hora de Madrid).
+- La lista de una noche se abre **7 días antes** (`lista.diasAntelacion`) y se cierra a las 23:00 de ese día (`cierreListaHora`), los dos en `public/data/config.js`, hora de Madrid.
 
 ### Protección contra abusos
 | Capa | Qué hace |
@@ -64,8 +67,9 @@ test/                            Pruebas (node --test)
 | Filtro de nombre | Pide nombre y apellido. Solo letras, máximo 40 caracteres y 5 palabras. Rechaza tecleo aleatorio, letras repetidas, insultos y nombres de broma. Normaliza mayúsculas. |
 | Token de formulario | Firmado por el servidor; no vale si se envía en menos de 3 s ni pasadas 2 h. |
 | Campo trampa | Campo oculto que solo rellenan los bots: se responde "ok" y no se guarda nada. |
-| Límites por IP | 5 altas cada 10 min, 15 al día y 20 intentos cada 10 min. Login del panel: 5 intentos cada 15 min. |
-| Duplicados y topes | El mismo nombre no puede repetirse en una noche. Topes por noche y por RPP en `data/config.js`. En Supabase se comprueban dentro de la base de datos, así que dos altas simultáneas no se los saltan. |
+| Límites por IP | 5 altas cada 10 min, 15 al día, 5 por noche y 20 intentos cada 10 min. Login del panel: 5 intentos cada 15 min. Los huecos se cogen antes de esperar a la base de datos, así que muchas peticiones a la vez no se los saltan. |
+| Duplicados y topes | El mismo nombre no puede repetirse en una noche; si ya está, se responde igual que a un alta nueva (sin guardarla), para que la lista no sirva para averiguar quién va. Topes por noche y por RPP en `public/data/config.js`, comprobados antes que los duplicados. En Supabase se comprueban dentro de la base de datos, así que dos altas simultáneas no se los saltan. |
+| Huella del origen | Cada alta guarda una huella de la IP (`origen`, migración 009), no la IP. Para quitar de golpe las altas de un abuso: Supabase → SQL Editor → `delete from inscripciones where fecha = 'AAAA-MM-DD' and origen = '…';`. Se borra a los 30 días con el resto de datos personales. Con `FORM_SECRET` fijo en `.env`, la misma IP da la misma huella aunque se reinicie el servidor. |
 | Servidor | Cuerpo máximo de 1 KB (8 KB en reservas), solo JSON y campos conocidos. Cabeceras de seguridad (CSP…). Los archivos internos no se sirven. |
 
 ## Reservas
@@ -76,14 +80,14 @@ La web envía **peticiones**: entran como `pendiente` y el equipo las confirma o
 - **Aforo:** `tipos_mesa.mesas` dice cuántas mesas hay de cada tipo (pista 30, VIP 7). Solo cuentan las **confirmadas**: mientras queden mesas sin confirmar, se siguen aceptando peticiones. Con todas confirmadas, ese tipo se bloquea esa noche en la web (pista y VIP por separado) y la base de datos no deja confirmar ni una más.
 - **Confirmar o rechazar:** Supabase → **Table Editor → reservas**, cambia `estado`. Para leerlas cómodas, **vista_reservas**: una fila por reserva con el pedido en texto, el RPP y un enlace de WhatsApp al cliente.
 - **Cambiar el aforo:** edita `mesas` en **tipos_mesa**. La web lo nota en unos 30 s.
-- **Precios:** los calcula el servidor con `data/reservados.js`; lo que mande el navegador no cuenta. Cada línea guarda el precio del momento. Al cambiar precios o bebidas, reinicia el servidor (`npm start`) para que los use.
-- **Protección:** las mismas capas que la lista (token, campo trampa, campos conocidos) más: 3 peticiones por hora y 6 al día por IP; una petición activa por teléfono y noche; teléfono en formato internacional; hasta 5 personas por botella; el pedido se comprueba contra el catálogo.
+- **Precios:** los calcula el servidor con `public/data/reservados.js`; lo que mande el navegador no cuenta. Cada línea guarda el precio del momento. Al cambiar precios o bebidas, reinicia el servidor (`npm start`) para que los use.
+- **Protección:** las mismas capas que la lista (token, campo trampa, campos conocidos) más: 3 peticiones por hora y 6 al día por IP (sin carreras: se cuentan antes de esperar a la base de datos y una petición rechazada no gasta); una petición activa por teléfono y noche (si el teléfono ya tiene una, se responde como si se hubiera recibido, pero no se guarda: así nadie puede averiguar si un número ha reservado; el equipo ve la primera); teléfono en formato internacional; hasta 5 personas por botella; el pedido se comprueba contra el catálogo.
 
 ## Panel de la web
 
 `/admin.html`, con la clave de `ADMIN_KEY`.
 
-**Estilo de la web** (arriba del todo): Verano, Navidad, Halloween o Carnaval. Verano es el estilo de siempre; los demás mantienen la estructura, las letras y el neón magenta, y añaden un color secundario y adornos (`css/temas.css` y `js/temas.js`):
+**Estilo de la web** (arriba del todo): Verano, Navidad, Halloween o Carnaval. Verano es el estilo de siempre; los demás mantienen la estructura, las letras y el neón magenta, y añaden un color secundario y adornos (`public/css/temas.css` y `public/js/temas.js`):
 - **Navidad:** dorado y rojo, gorro de Papá Noel en la Ø del logo, guirnalda de luces, bolas colgando y nieve.
 - **Halloween:** naranja y morado, sombrero de bruja, telarañas, araña, calabazas encendidas y murciélagos que cruzan de vez en cuando.
 - **Carnaval (de Cádiz):** amarillo y azul, antifaz, serpentinas, papelillos y guitarra, bombo, caja y pito de caña en neón.
@@ -93,7 +97,7 @@ Las partículas (nieve, papelillos, murciélagos) no se muestran con "reducir mo
 Además tiene dos pestañas:
 
 - **Eventos y calendario**: un calendario por meses. Al pulsar un día puedes:
-  - Marcarlo como abierto o cerrado aunque no toque (por ejemplo, abrir en Nochevieja o cerrar un sábado). Si eliges lo que ya tocaba según `data/config.js`, no se guarda ningún cambio. La lista y los reservados respetan estos cambios al momento.
+  - Marcarlo como abierto o cerrado aunque no toque (por ejemplo, abrir en Nochevieja o cerrar un sábado). Si eliges lo que ya tocaba según `public/data/config.js`, no se guarda ningún cambio. La lista y los reservados respetan estos cambios al momento.
   - Crear, editar o quitar su evento: nombre, DJ invitado, descripción, enlace de Instagram y foto. La foto se reduce en el navegador y se sube a la carpeta de eventos de Google Drive; al cambiarla o quitar el evento, la anterior va a la papelera de Drive.
 - **Galería**: los álbumes de Drive. Para cada uno puedes cambiar el nombre que se ve en la web, elegir la portada, anclar el álbum (sale el primero) y anclar fotos (salen primero dentro del álbum). En Drive no se cambia nada. "Resetear ajustes" borra todo lo cambiado en ese álbum y lo deja como en Drive.
 
@@ -142,7 +146,7 @@ En el plan gratuito, Supabase pausa el proyecto tras 7 días sin actividad. Mien
 Panel → **Eventos y calendario** → pulsa el día. Si una noche no tiene foto, se muestra el logo.
 
 ### Subir fotos a la galería
-La galería lee las carpetas de Google Drive a través del Google Apps Script de `galeria.scriptUrl` en `data/config.js`. Cada carpeta es un álbum.
+La galería lee las carpetas de Google Drive a través del Google Apps Script de `galeria.scriptUrl` en `public/data/config.js`. Cada carpeta es un álbum.
 1. Crea una carpeta nueva en Drive (su nombre es el título del álbum) y sube las fotos.
 2. Las fotos tienen que estar compartidas como "Cualquier persona con el enlace" para que se vean en la web.
 3. Portada: la elegida en el panel; si no hay, la foto llamada `portada` (`portada.jpg`, `portada.png`…); si tampoco, la primera.
@@ -150,15 +154,24 @@ La galería lee las carpetas de Google Drive a través del Google Apps Script de
 5. Los álbumes salen del más reciente al más antiguo (los anclados en el panel, primero). Se ven los que caben en una fila y el resto con "Ver galería".
 
 ### Cerrar o abrir un día concreto
-Panel → **Eventos y calendario** → pulsa el día → "Abrir" o "Cerrar". (También se puede con `cerrado` y `aperturasExtra` en `data/config.js`; lo del panel manda.)
+Panel → **Eventos y calendario** → pulsa el día → "Abrir" o "Cerrar". (También se puede con `cerrado` y `aperturasExtra` en `public/data/config.js`; lo del panel manda.)
 
 ## Publicar
 **Caché y compresión.** El servidor comprime HTML, CSS y JS (brotli o gzip) y manda un `ETag` con cada archivo, así que una visita repetida solo pregunta «¿ha cambiado?» y recibe un 304 sin cuerpo. Por eso, al cambiar un archivo:
 - **CSS o JS con `?v=` en el HTML** (`styles.css?v=18`, `app.js?v=19`…): subid el número en el HTML. Con `?v=` el navegador guarda el archivo un año sin preguntar.
-- **Imágenes de `img/`**: se guardan una semana. Para cambiar una, usad otro nombre de archivo (o añadid `?v=`).
-- HTML, `data/*.js` y `js/compartido/*.js`: se ven al momento.
+- **Imágenes de `public/img/`**: se guardan una semana. Para cambiar una, usad otro nombre de archivo (o añadid `?v=`).
+- HTML, `public/data/*.js` y `public/js/compartido/*.js`: se ven al momento.
 
-La lista necesita un hosting que ejecute Node.js (Render, Railway, un VPS…); GitHub Pages no sirve. Define `ADMIN_KEY`, `FORM_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `DRIVE_SCRIPT_CLAVE` y, detrás de un proxy, `TRUST_PROXY=1`. También con el túnel de Cloudflare (`cloudflared`): sin `TRUST_PROXY=1` todas las visitas llegan desde la misma IP y comparten los límites. Con él, la IP de cada visitante se lee del final de `X-Forwarded-For`, que es la que añade el proxy. Sin Supabase, los datos se guardan en archivos JSON, que en estos hostings se pierden al redesplegar.
+La lista necesita un servidor que ejecute Node.js 22 o superior (un PC o VPS con `cloudflared`, Render, Railway…); GitHub Pages no sirve. Define en `.env` (ver `.env.example`):
+- `ADMIN_KEY` de 20 caracteres o más: con la de ejemplo el servidor no arranca, y con una más corta avisa.
+- `FORM_SECRET` fijo, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y `DRIVE_SCRIPT_CLAVE`. Sin Supabase, los datos se guardan en archivos JSON (`data/db`), que en un hosting se pierden al redesplegar.
+- **`TRUST_PROXY`**: con el túnel de Cloudflare (`cloudflared`) en el mismo equipo, `TRUST_PROXY=1`. Sin él, todas las visitas llegan desde 127.0.0.1 y comparten los límites (5 fallos de clave de cualquiera bloquearían el panel). Con él, la IP de cada visitante se lee del final de `X-Forwarded-For`, solo si la conexión viene del propio equipo, y el servidor escucha solo en 127.0.0.1: nadie llega al puerto sin pasar por el túnel. En un hosting con el proxy en otra máquina (Render, Railway…), `TRUST_PROXY=remoto`.
+
+**Supervisor.** Ejecuta el servidor con algo que lo vuelva a arrancar si se cae (pm2, un servicio de Windows, systemd o el propio hosting): ante un error inesperado, el servidor lo escribe en el registro y se cierra para arrancar limpio.
+
+**Cloudflare.** En el dominio: *SSL/TLS → Edge Certificates → Always Use HTTPS* activado. El servidor ya manda `Strict-Transport-Security` y la cookie del panel con `Secure` cuando va detrás del proxy.
+
+**Fotos de eventos (Apps Script).** Tras actualizar `google-apps-script/Codigo.gs`, ejecuta `configurarClave` y copia la línea `const HASH_CLAVE = "…";` que sale en el registro: así una petición anónima no gasta la cuota de la cuenta de Google.
 
 ## Flujo de trabajo (2 personas)
 

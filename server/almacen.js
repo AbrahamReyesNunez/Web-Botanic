@@ -189,6 +189,9 @@ function crearAlmacen(dir) {
     return { ok: true, id: nueva.id };
   }
 
+  /* decidirReserva y borrarReserva no tienen ruta HTTP todavía: son la API prevista para la futura app.
+     Hoy solo las usan los tests y server/comprobar-supabase.js. */
+
   /* Lo que en Supabase hace el trigger de aforo al cambiar el estado */
   async function decidirReserva(id, estado) {
     if (!ESTADOS.has(estado)) return { ok: false, motivo: "estado" };

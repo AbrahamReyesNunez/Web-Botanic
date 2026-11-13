@@ -42,6 +42,7 @@ data/reservados.js               Mesas, precios y bebidas de los reservados (con
 data/eventos.js                  Nombre por defecto de cada noche (los eventos se crean en el panel)
 google-apps-script/Codigo.gs     Código del Google Apps Script de la galería (se pega en Apps Script)
 data/db/                         Solo en modo JSON: rpps.json, mesas.json, inscripciones.json, reservas.json y contenido.json (las tres últimas no se suben)
+                                 rpps.json trae RPP de prueba solo para desarrollo: los reales van en Supabase
 img/                             Logo y fondos (las portadas y las fotos de la galería están en Google Drive)
 test/                            Pruebas (node --test)
 ```

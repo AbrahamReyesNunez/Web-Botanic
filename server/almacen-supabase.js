@@ -180,6 +180,9 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     }), "crear reserva");
   }
 
+  /* decidirReserva y borrarReserva no tienen ruta HTTP todavía: son la API prevista para la futura app.
+     Hoy solo las usan los tests y server/comprobar-supabase.js. */
+
   /* El trigger de la base de datos rechaza confirmar por encima del aforo */
   async function decidirReserva(id, estado) {
     const { data, error } = await db.from("reservas").update({ estado }).eq("id", id).select("id");

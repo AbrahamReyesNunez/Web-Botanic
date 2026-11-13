@@ -9,7 +9,13 @@
   <meta property="og:title" content="Botanic Chipiona · Discoteca">
   <meta property="og:description" content="De miércoles a sábado. Agenda, lista y reservados.">
   <meta property="og:image" content="img/brand/botanic.jpg">
-  <link rel="icon" href="img/brand/botanic.jpg">
+  <link rel="icon" href="img/brand/icono-48.png" sizes="48x48" type="image/png">
+  <link rel="apple-touch-icon" href="img/brand/icono-180.png">
+  <!-- Fondo de la portada (lo que tarda más en verse en móvil): se pide ya, antes que el CSS.
+       Mismas condiciones que --hojas-arriba en css/styles.css -->
+  <link rel="preload" as="image" href="img/brand/hojas-arriba-movil.webp" media="(max-aspect-ratio: 3/4)" fetchpriority="high">
+  <link rel="preload" as="image" href="img/brand/hojas-arriba-1600.webp" media="(min-aspect-ratio: 751/1000) and (max-width: 1280px)" fetchpriority="high">
+  <link rel="preload" as="image" href="img/brand/hojas-arriba-2560.webp" media="(min-aspect-ratio: 751/1000) and (min-width: 1281px)" fetchpriority="high">
   <!-- Eventos, días, galería y estilo de la época editados desde el panel (lo genera el servidor).
        Va aquí para que arranque.js ponga el estilo antes de pintar la página -->
   <script src="api/web.js"></script>
@@ -18,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=17">
+  <link rel="stylesheet" href="css/styles.css?v=18">
   <link rel="stylesheet" href="css/temas.css?v=2">
 </head>
 <body>

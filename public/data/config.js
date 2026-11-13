@@ -39,7 +39,7 @@ window.BOTANIC_CONFIG = {
   /* Galería: cada carpeta de Google Drive es un álbum. Las lista este Google Apps Script,
      que devuelve [{ nombre, creado, fotos: [{ id, nombre }] }] */
   galeria: {
-    scriptUrl: "https://script.google.com/macros/s/AKfycby7ZRo9n5_RV6ygLvIX4ZGobm20Bt1I44wR9nR_dDFn3ieIbWsMQJsrFIxctLXSZ1Bl/exec",
+    scriptUrl: "https://script.google.com/macros/s/AKfycbxqJ4OMFjLNdt_A9gHXXMwT0hc7FI6wcajR9Q2vmnwAphwJ_7PmcudZFyOaBFtFmBZO/exec",
     tamMiniatura: "w800",   // ancho de las fotos en la cuadrícula
     tamGrande: "w2000",     // ancho de la foto ampliada
     tiempoMaximo: 45        // segundos esperando al script antes de mostrar el error

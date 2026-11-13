@@ -162,7 +162,16 @@ Panel → **Eventos y calendario** → pulsa el día → "Abrir" o "Cerrar". (Ta
 - **Imágenes de `public/img/`**: se guardan una semana. Para cambiar una, usad otro nombre de archivo (o añadid `?v=`).
 - HTML, `public/data/*.js` y `public/js/compartido/*.js`: se ven al momento.
 
-La lista necesita un hosting que ejecute Node.js (Render, Railway, un VPS…); GitHub Pages no sirve. Define `ADMIN_KEY`, `FORM_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `DRIVE_SCRIPT_CLAVE` y, detrás de un proxy, `TRUST_PROXY=1`. También con el túnel de Cloudflare (`cloudflared`): sin `TRUST_PROXY=1` todas las visitas llegan desde la misma IP y comparten los límites. Con él, la IP de cada visitante se lee del final de `X-Forwarded-For`, que es la que añade el proxy. Sin Supabase, los datos se guardan en archivos JSON, que en estos hostings se pierden al redesplegar.
+La lista necesita un servidor que ejecute Node.js 22 o superior (un PC o VPS con `cloudflared`, Render, Railway…); GitHub Pages no sirve. Define en `.env` (ver `.env.example`):
+- `ADMIN_KEY` de 20 caracteres o más: con la de ejemplo el servidor no arranca, y con una más corta avisa.
+- `FORM_SECRET` fijo, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y `DRIVE_SCRIPT_CLAVE`. Sin Supabase, los datos se guardan en archivos JSON (`data/db`), que en un hosting se pierden al redesplegar.
+- **`TRUST_PROXY`**: con el túnel de Cloudflare (`cloudflared`) en el mismo equipo, `TRUST_PROXY=1`. Sin él, todas las visitas llegan desde 127.0.0.1 y comparten los límites (5 fallos de clave de cualquiera bloquearían el panel). Con él, la IP de cada visitante se lee del final de `X-Forwarded-For`, solo si la conexión viene del propio equipo, y el servidor escucha solo en 127.0.0.1: nadie llega al puerto sin pasar por el túnel. En un hosting con el proxy en otra máquina (Render, Railway…), `TRUST_PROXY=remoto`.
+
+**Supervisor.** Ejecuta el servidor con algo que lo vuelva a arrancar si se cae (pm2, un servicio de Windows, systemd o el propio hosting): ante un error inesperado, el servidor lo escribe en el registro y se cierra para arrancar limpio.
+
+**Cloudflare.** En el dominio: *SSL/TLS → Edge Certificates → Always Use HTTPS* activado. El servidor ya manda `Strict-Transport-Security` y la cookie del panel con `Secure` cuando va detrás del proxy.
+
+**Fotos de eventos (Apps Script).** Tras actualizar `google-apps-script/Codigo.gs`, ejecuta `configurarClave` y copia la línea `const HASH_CLAVE = "…";` que sale en el registro: así una petición anónima no gasta la cuota de la cuenta de Google.
 
 ## Flujo de trabajo (2 personas)
 

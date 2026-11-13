@@ -98,14 +98,18 @@ function crearAlmacen(dir) {
 
   const rppActivo = (codigo) => rpps().find((r) => r.codigo === codigo && r.activo !== false) || null;
 
+  /* Si una escritura falla (p. ej. el antivirus o OneDrive tienen el archivo bloqueado), quien la pidió recibe
+     el error, pero la cola sigue: antes se quedaba rechazada y no se volvía a guardar nada hasta reiniciar.
+     Cada escritura lleva la lista entera, así que la siguiente que salga bien guarda también lo pendiente */
   function guardarEn(archivo, lista) {
     const datos = JSON.stringify(lista, null, 2);
-    cola = cola.then(async () => {
+    const operacion = cola.then(async () => {
       const tmp = `${archivo}.${process.pid}.tmp`;
       await fsp.writeFile(tmp, datos, "utf8");
       await fsp.rename(tmp, archivo);
     });
-    return cola;
+    cola = operacion.catch((e) => console.error(`  ✘ No se pudo guardar ${path.basename(archivo)}: ${e.message}`));
+    return operacion;
   }
   const guardar = () => guardarEn(archivoInscripciones, inscripciones);
   const guardarReservas = () => guardarEn(archivoReservas, reservas);

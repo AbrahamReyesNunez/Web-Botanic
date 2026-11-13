@@ -13,9 +13,14 @@ const DIAS_RECUENTO = 365;   // el panel cuenta las noches de un año atrás a u
 const hash = (s) => crypto.createHash("sha256").update(String(s)).digest();
 
 function crearAdmin({ almacen, cal, claveAdmin }) {
+  // Sin clave, hash(undefined) sería el de "undefined": una clave que cualquiera podría probar
+  if (typeof claveAdmin !== "string" || !claveAdmin) throw new Error("Falta la clave del panel (ADMIN_KEY).");
   const sesiones = new Map(); // token -> caducidad
-  const intentosLogin = crearLimitador([{ ms: 15 * 60 * 1000, max: 5 }]);
+  const fallosLogin = crearLimitador([{ ms: 15 * 60 * 1000, max: 5 }]);
   const claveHash = hash(claveAdmin);
+  // Con una clave larga es imposible adivinarla a base de intentos: la correcta entra aunque esa IP
+  // esté bloqueada (si no, cualquiera que comparta IP, o que se la invente, podría dejar al equipo fuera)
+  const claveFuerte = claveAdmin.length >= 20;
 
   function leerCookie(req) {
     const m = (req.headers.cookie || "").match(new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]{20,100})`));
@@ -30,12 +35,16 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
     return true;
   }
 
+  /* Solo cuentan los fallos: entrar bien no gasta intentos */
   function login(datos, ip, seguro) {
-    const lim = intentosLogin.comprobar(ip);
-    if (!lim.ok) return { status: 429, cuerpo: { ok: false, error: "Demasiados intentos. Espera unos minutos." }, cabeceras: { "Retry-After": String(lim.esperar) } };
-    intentosLogin.anotar(ip);
     const clave = datos && typeof datos.clave === "string" ? datos.clave : "";
-    if (!clave || clave.length > 200 || !crypto.timingSafeEqual(hash(clave), claveHash)) {
+    const correcta = !!clave && clave.length <= 200 && crypto.timingSafeEqual(hash(clave), claveHash);
+    const lim = fallosLogin.comprobar(ip);
+    if (!lim.ok && !(correcta && claveFuerte)) {
+      return { status: 429, cuerpo: { ok: false, error: "Demasiados intentos. Espera unos minutos." }, cabeceras: { "Retry-After": String(lim.esperar) } };
+    }
+    if (!correcta) {
+      fallosLogin.anotar(ip);
       return { status: 401, cuerpo: { ok: false, error: "Clave incorrecta." } };
     }
     const token = crypto.randomBytes(32).toString("base64url");
@@ -196,7 +205,7 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
     return ok ? { status: 200, cuerpo: { ok: true } } : { status: 404, cuerpo: { ok: false, error: "No existe." } };
   }
 
-  return { autorizado, login, logout, noches, resumen, reservas, rpps, crearRpp, actualizarRpp, eliminarRpp, borrar, cerrar: () => intentosLogin.cerrar() };
+  return { autorizado, login, logout, noches, resumen, reservas, rpps, crearRpp, actualizarRpp, eliminarRpp, borrar, cerrar: () => fallosLogin.cerrar() };
 }
 
 module.exports = { crearAdmin };

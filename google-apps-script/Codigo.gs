@@ -7,8 +7,9 @@
    CÓMO ACTUALIZARLO (una vez):
    1. Sustituye todo el código del proyecto por este y guarda.
    2. Arriba, elige la función "configurarClave" y pulsa Ejecutar. La primera vez
-      Google pide permisos: acéptalos. En el registro de ejecución sale la clave:
-      cópiala al .env del servidor como DRIVE_SCRIPT_CLAVE=...
+      Google pide permisos: acéptalos. En el registro de ejecución salen dos líneas:
+      - DRIVE_SCRIPT_CLAVE=... → al .env del servidor
+      - const HASH_CLAVE = "..."; → sustituye la línea HASH_CLAVE de abajo y guarda
    3. Implementar → Gestionar implementaciones → lápiz (Editar) →
       Versión: "Nueva versión" → Implementar. Así la URL no cambia.
       (Ejecutar como: yo · Quién tiene acceso: cualquier usuario)
@@ -21,6 +22,9 @@
 const CARPETA_GALERIA = "16K4RLGrm390CDqbCoL_e215kb8ImoQpd";
 const NOMBRE_CARPETA_EVENTOS = "Botanic · Fotos de eventos";
 const TIPOS_FOTO = ["image/jpeg", "image/png", "image/webp"];
+/* SHA-256 de la clave del servidor (la da configurarClave). Se comprueba sin leer las propiedades del script:
+   así una petición anónima no gasta la cuota diaria de la cuenta de Google. Publicar el hash no descubre la clave */
+const HASH_CLAVE = "";
 
 /* ---------- GET: álbumes ----------
    [{ id, nombre, creado, fotos: [{ id, nombre }] }], del más reciente al más antiguo */
@@ -59,9 +63,7 @@ function doGet() {
 function doPost(e) {
   try {
     const cuerpo = JSON.parse(e.postData.contents);
-
-    const clave = PropertiesService.getScriptProperties().getProperty("CLAVE_SUBIDA");
-    if (!clave || cuerpo.clave !== clave) return json({ ok: false, error: "Clave incorrecta" });
+    if (!claveValida(cuerpo.clave)) return json({ ok: false, error: "Clave incorrecta" });
 
     if (cuerpo.accion === "subir") {
       if (TIPOS_FOTO.indexOf(cuerpo.tipo) === -1) return json({ ok: false, error: "Tipo de imagen no permitido" });
@@ -92,6 +94,19 @@ function doPost(e) {
   }
 }
 
+/* Primero el formato (la clave son 64 caracteres hexadecimales) y luego el hash: ninguno de los dos gasta
+   cuota. Sin HASH_CLAVE (script sin actualizar) se compara con la propiedad, como antes */
+function claveValida(clave) {
+  if (typeof clave !== "string" || !/^[0-9a-f]{64}$/.test(clave)) return false;
+  if (HASH_CLAVE) return sha256(clave) === HASH_CLAVE;
+  return clave === PropertiesService.getScriptProperties().getProperty("CLAVE_SUBIDA");
+}
+
+function sha256(texto) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, texto, Utilities.Charset.UTF_8)
+    .map(function (b) { return ((b + 256) % 256).toString(16).padStart(2, "0"); }).join("");
+}
+
 /* Carpeta de fotos de eventos: se crea la primera vez y su id se guarda en las propiedades del script */
 function carpetaEventos() {
   const props = PropertiesService.getScriptProperties();
@@ -117,6 +132,7 @@ function configurarClave() {
   }
   const carpeta = carpetaEventos();
   Logger.log("Copia esta línea en el .env del servidor:\nDRIVE_SCRIPT_CLAVE=" + clave);
+  Logger.log("Y esta en el código, en lugar de la línea HASH_CLAVE (luego guarda e implementa una versión nueva):\nconst HASH_CLAVE = \"" + sha256(clave) + "\";");
   Logger.log("Carpeta de fotos de eventos: " + carpeta.getUrl());
 }
 

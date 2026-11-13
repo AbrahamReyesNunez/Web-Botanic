@@ -25,6 +25,7 @@ const { crearReservas } = require("./reservas.js");
 const { crearContenido } = require("./contenido.js");
 const { crearDrive } = require("./drive.js");
 const { crearGaleria } = require("./galeria.js");
+const { crearLimitador } = require("./limites.js");
 
 const RAIZ = path.resolve(__dirname, "..");
 /* Lo único que se sirve como archivos: la web. .env, data/db, el código y la documentación quedan fuera */
@@ -112,6 +113,22 @@ const CABECERAS_SEGURIDAD = {
   "X-Frame-Options": "DENY"
 };
 
+/* ¿La conexión viene del propio equipo? */
+const esLocal = (dir) => dir === "127.0.0.1" || dir === "::1" || dir === "::ffff:127.0.0.1";
+
+/* Clave de los límites por IP. Una IPv6 se agrupa por su /64, que es lo que suele tener cada conexión:
+   contando cada dirección completa, quien tiene un /64 tendría límites infinitos */
+function claveIp(ip) {
+  const v4 = /^::ffff:(\d{1,3}(\.\d{1,3}){3})$/i.exec(ip);
+  if (v4) return v4[1];
+  if (!ip.includes(":")) return ip;
+  const [cabeza, cola] = ip.split("%")[0].toLowerCase().split("::");   // sin la zona (fe80::1%eth0)
+  const delante = cabeza ? cabeza.split(":") : [];
+  const detras = cola ? cola.split(":") : [];
+  const grupos = cola === undefined ? delante : [...delante, ...Array(Math.max(0, 8 - delante.length - detras.length)).fill("0"), ...detras];
+  return `${grupos.slice(0, 4).map((h) => (parseInt(h, 16) || 0).toString(16)).join(":")}::/64`;
+}
+
 /* Hora actual en Chipiona, sea cual sea la zona horaria del servidor */
 function ahoraMadrid() {
   const partes = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
@@ -158,12 +175,23 @@ function crearServidor(opciones = {}) {
   const drive = opciones.drive || crearDrive({ url: (cfg.galeria || {}).scriptUrl, clave: opciones.driveClave });
   contenido = crearContenido({ almacen, cal, drive });
   const galeria = opciones.galeria || crearGaleria({ url: (cfg.galeria || {}).scriptUrl });
-  const trustProxy = !!opciones.trustProxy;
+  // trustProxy: false · "local" (cloudflared o un proxy en el mismo equipo) · "remoto" (Render, Railway…)
+  const trustProxy = opciones.trustProxy === true ? "local" : (opciones.trustProxy || false);
 
   // Detrás de un proxy, la IP real es la ÚLTIMA de X-Forwarded-For: la añade el proxy.
   // Las anteriores las puede escribir el propio visitante para saltarse los límites por IP.
-  const ipDe = (req) => (trustProxy && String(req.headers["x-forwarded-for"] || "").split(",").pop().trim()) || req.socket.remoteAddress || "?";
-  const esHttps = (req) => req.socket.encrypted || (trustProxy && req.headers["x-forwarded-proto"] === "https");
+  // Con "local" solo se cree la cabecera si la conexión viene del propio equipo: quien llegue
+  // directamente al puerto no puede elegir con qué IP le cuentan los límites
+  const deConfianza = (req) => trustProxy === "remoto" || (trustProxy === "local" && esLocal(req.socket.remoteAddress));
+  const ipDe = (req) => {
+    const reenviada = deConfianza(req) && String(req.headers["x-forwarded-for"] || "").split(",").pop().trim();
+    return claveIp(reenviada || req.socket.remoteAddress || "?");
+  };
+  const esHttps = (req) => req.socket.encrypted || (deConfianza(req) && req.headers["x-forwarded-proto"] === "https");
+  // Cookie del panel con Secure en producción (detrás del proxy siempre se entra por https)
+  const cookieSegura = (req) => req.socket.encrypted || !!trustProxy;
+  // Consultas de links de RPP: los códigos no se pueden adivinar, pero así tampoco se pueden recorrer
+  const consultasRpp = crearLimitador([{ ms: 10 * 60 * 1000, max: 60 }]);
 
   function enviar(res, status, cuerpo, cabeceras = {}) {
     res.writeHead(status, { ...CABECERAS_SEGURIDAD, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...cabeceras });
@@ -333,6 +361,8 @@ function crearServidor(opciones = {}) {
 
     const rppMatch = ruta.match(/^\/api\/rpp\/([a-z0-9]{4,32})$/);
     if (m === "GET" && rppMatch) {
+      const lim = consultasRpp.reservar(ipDe(req));
+      if (!lim.ok) return enviar(res, 429, { ok: false, error: "Demasiadas consultas. Prueba de nuevo más tarde." }, { "Retry-After": String(lim.esperar) });
       const r = await almacen.rppActivo(rppMatch[1]);
       return r ? enviar(res, 200, { ok: true, codigo: r.codigo, nombre: r.nombre }) : enviar(res, 404, { ok: false, error: "RPP no encontrado." });
     }
@@ -358,7 +388,7 @@ function crearServidor(opciones = {}) {
     if (m === "POST" && ruta === "/api/admin/login") {
       const datos = await leerJSON(req, res);
       if (datos === null) return;
-      return responder(res, admin.login(datos, ipDe(req), esHttps(req)));
+      return responder(res, admin.login(datos, ipDe(req), cookieSegura(req)));
     }
 
     if (ruta.startsWith("/api/admin/")) {
@@ -422,6 +452,8 @@ function crearServidor(opciones = {}) {
 
   const servidor = http.createServer(async (req, res) => {
     try {
+      // Por https, el navegador recuerda durante un año que solo debe entrar por https
+      if (esHttps(req)) res.setHeader("Strict-Transport-Security", "max-age=31536000");
       const url = new URL(req.url, "http://localhost");
       const ruta = url.pathname;
       if (ruta.startsWith("/api/")) return await api(req, res, ruta, url);
@@ -439,14 +471,14 @@ function crearServidor(opciones = {}) {
   servidor.requestTimeout = 120_000;
   servidor.setTimeout(120_000);
 
-  servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); });
+  servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); consultasRpp.cerrar(); });
   servidor.almacen = almacen;
   servidor.galeria = galeria;
   servidor.listo = contenido.listo;
   return servidor;
 }
 
-module.exports = { crearServidor, cargarEnv, archivoPublico };
+module.exports = { crearServidor, cargarEnv, archivoPublico, claveIp };
 
 if (require.main === module) {
   // Un error que nadie recoge deja el servidor en un estado desconocido: se registra y se sale,
@@ -456,8 +488,14 @@ if (require.main === module) {
   cargarEnv();
   let claveAdmin = process.env.ADMIN_KEY;
   if (!claveAdmin) {
-    claveAdmin = crypto.randomBytes(9).toString("base64url");
+    claveAdmin = crypto.randomBytes(18).toString("base64url");
     console.warn(`\n  ADMIN_KEY no definida (ver .env.example). Clave temporal del panel: ${claveAdmin}\n`);
+  } else if (claveAdmin === "cambia-esta-clave") {
+    // Es la de .env.example, que está publicada en GitHub: cualquiera podría entrar en el panel
+    console.error("\n  ADMIN_KEY es la clave de ejemplo de .env.example (pública en GitHub). Pon una tuya, de 20 caracteres o más.\n");
+    process.exit(1);
+  } else if (claveAdmin.length < 20) {
+    console.warn(`\n  ⚠ ADMIN_KEY tiene ${claveAdmin.length} caracteres: usa 20 o más antes de publicar la web.\n`);
   }
   const { SUPABASE_URL, SUPABASE_SECRET_KEY } = process.env;
   if (!SUPABASE_URL !== !SUPABASE_SECRET_KEY) {
@@ -471,9 +509,12 @@ if (require.main === module) {
     supabase,
     secreto: process.env.FORM_SECRET || undefined,
     driveClave: process.env.DRIVE_SCRIPT_CLAVE || undefined,
-    trustProxy: process.env.TRUST_PROXY === "1"
+    trustProxy: ({ 1: "local", remoto: "remoto" })[process.env.TRUST_PROXY] || false
   });
-  servidor.listo.then(() => servidor.listen(puerto, () => {
+  // Detrás de cloudflared (TRUST_PROXY=1) solo hace falta escuchar en el propio equipo: así nadie de la red
+  // local ni de internet llega al puerto sin pasar por el túnel. HOST lo cambia (p. ej. 0.0.0.0)
+  const host = process.env.HOST || (process.env.TRUST_PROXY === "1" ? "127.0.0.1" : undefined);
+  servidor.listo.then(() => servidor.listen(puerto, host, () => {
     console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html`);
     console.log(supabase ? "  Datos: Supabase" : "  Datos: data/db (JSON). Para usar Supabase, define SUPABASE_URL y SUPABASE_SECRET_KEY.");
     if (!process.env.DRIVE_SCRIPT_CLAVE) console.log("  Sin DRIVE_SCRIPT_CLAVE: el panel no podrá subir fotos de eventos a Drive (ver .env.example).");

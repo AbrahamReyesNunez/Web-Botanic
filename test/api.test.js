@@ -354,3 +354,52 @@ test("un cuerpo JSON que no es un objeto (null, lista, número) recibe 400 y no 
     }
   } finally { await s.cerrar(); }
 });
+
+const login = (base, clave, cabeceras = {}) => fetch(`${base}/api/admin/login`, {
+  method: "POST", headers: { "Content-Type": "application/json", ...cabeceras }, body: JSON.stringify({ clave })
+});
+
+test("login del panel: solo cuentan los fallos y, con clave larga, la correcta entra aunque la IP esté bloqueada (P2)", async () => {
+  const fuerte = "una-clave-larga-de-prueba-123";
+  const s = await arrancar({ claveAdmin: fuerte });
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await login(s.base, fuerte)).status, 200, "entrar bien no gasta intentos");
+    for (let i = 0; i < 5; i++) assert.equal((await login(s.base, "mala")).status, 401);
+    assert.equal((await login(s.base, "mala")).status, 429);
+    assert.equal((await login(s.base, fuerte)).status, 200, "un atacante en la misma IP no deja fuera al equipo");
+  } finally { await s.cerrar(); }
+  // Con clave corta, el bloqueo vale también para la correcta (si no, se podría adivinar a base de intentos)
+  const d = await arrancar({ claveAdmin: "corta" });
+  try {
+    for (let i = 0; i < 5; i++) await login(d.base, "mala");
+    assert.equal((await login(d.base, "corta")).status, 429);
+  } finally { await d.cerrar(); }
+});
+
+test("sin clave del panel no arranca (antes valía la palabra \"undefined\")", () => {
+  assert.throws(() => crearServidor({ datos: fs.mkdtempSync(path.join(os.tmpdir(), "botanic-")) }), /ADMIN_KEY/);
+});
+
+test("detrás del proxy: cookie del panel con Secure y HSTS si se entra por https (P4)", async () => {
+  const s = await arrancar({ trustProxy: "local" });
+  try {
+    const r = await login(s.base, "clave-de-prueba", { "X-Forwarded-Proto": "https", "X-Forwarded-For": "203.0.113.9" });
+    assert.match(r.headers.get("set-cookie"), /; Secure/);
+    assert.equal(r.headers.get("strict-transport-security"), "max-age=31536000");
+  } finally { await s.cerrar(); }
+  // En local, sin proxy, ni Secure (no funcionaría por http) ni HSTS
+  const local = await arrancar();
+  try {
+    const r = await login(local.base, "clave-de-prueba");
+    assert.doesNotMatch(r.headers.get("set-cookie"), /Secure/);
+    assert.equal(r.headers.get("strict-transport-security"), null);
+  } finally { await local.cerrar(); }
+});
+
+test("límites por IP: las IPv6 se agrupan por /64 (P5)", () => {
+  const { claveIp } = require("../server/server.js");
+  assert.equal(claveIp("2001:db8:85a3:8d3:1319:8a2e:370:7348"), claveIp("2001:db8:85a3:8d3::1"));
+  assert.notEqual(claveIp("2001:db8:85a3:8d3::1"), claveIp("2001:db8:85a3:8d4::1"));
+  assert.equal(claveIp("::ffff:203.0.113.9"), "203.0.113.9");
+  assert.equal(claveIp("203.0.113.9"), "203.0.113.9");
+});

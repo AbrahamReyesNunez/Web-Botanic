@@ -305,6 +305,7 @@ test("archivos privados y rutas con ../ no se sirven", async () => {
     assert.equal(index.status, 200);
     assert.match(index.headers.get("content-security-policy"), /frame-ancestors 'none'/);
     assert.equal((await fetch(`${s.base}/js/compartido/nombre.js`)).status, 200);
+    assert.equal((await fetch(`${s.base}/admin-lista.html`)).status, 404, "el panel antiguo está retirado");
     const perdida = await fetch(`${s.base}/no/existe`);
     assert.equal(perdida.status, 404);
     assert.match(perdida.headers.get("content-type"), /text\/html/);

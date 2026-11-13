@@ -274,7 +274,7 @@ function crearServidor(opciones = {}) {
         return responder(res, await contenido.guardarTema(datos));
       }
 
-      // ---------- Lista, RPPs y reservados (sin panel por ahora; la API se mantiene para la app) ----------
+      // ---------- Lista, RPPs y reservados: API para la futura app (sin panel en la web) ----------
       if (m === "GET" && ruta === "/api/admin/noches") return enviar(res, 200, { ok: true, ...(await admin.noches()) });
       if (m === "GET" && ruta === "/api/admin/resumen") return responder(res, await admin.resumen(url.searchParams.get("fecha")));
       if (m === "GET" && ruta === "/api/admin/reservas") return responder(res, await admin.reservas(url.searchParams.get("fecha")));

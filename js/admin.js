@@ -1,6 +1,5 @@
 /* =========================================================
    PANEL DE LA WEB — eventos, días del calendario y galería
-   (El panel anterior de lista, RPPs y reservados está en admin-lista.html)
    ========================================================= */
 (function () {
   "use strict";

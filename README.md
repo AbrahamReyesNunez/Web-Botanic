@@ -21,10 +21,9 @@ Si abres `index.html` directamente (sin servidor), la web se ve, pero la lista n
 
 ```
 index.html · admin.html          Web pública y panel de la web (eventos, días y galería)
-admin-lista.html                 Panel anterior de lista, RPPs y reservados (sin enlazar)
 css/styles.css · css/admin.css   Estilos
 js/app.js                        Calendario, lista, galería, efectos
-js/admin.js · js/admin-lista.js  Panel de la web · panel anterior
+js/admin.js                      Panel de la web
 js/compartido/                   Código que usan la web y el servidor
   calendario.js                  Días de apertura y cierre de lista
   nombre.js                      Filtro y normalización de nombres
@@ -53,7 +52,7 @@ test/                            Pruebas (node --test)
   - Cada RPP tiene además un link de reservados (`https://dominio/?reserva=CÓDIGO`): abre la web en la sección de reservados y la reserva queda asignada a ese RPP. Cada link cuenta solo para lo suyo.
   - Sin link queda en **"Sin RPP"**, así nadie puede asignarse un RPP a mano.
 - **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, escribe solo su `nombre` (el `codigo` del link se genera solo y no puede haber dos RPP con el mismo nombre). Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
-- **Panel anterior** (`/admin-lista.html`, sin enlazar desde ningún sitio): inscritos por noche y por RPP con porcentajes, buscador, borrado de nombres colados, exportación a PDF, alta y edición de RPPs y los dos links de cada RPP (lista y reservados) para copiar. Su API (`/api/admin/...`) se mantiene para la futura app móvil.
+- **Ver la lista:** en Supabase → **Table Editor** (`inscripciones` por noche y RPP). La API de administración de lista, RPPs y reservas (`/api/admin/noches`, `resumen`, `reservas`, `rpps`, `rpp/:codigo` e `inscripcion/:id`) no tiene pantalla en la web: se mantiene para la futura app móvil.
 - La lista de un día se cierra a las 23:00 de ese día (`cierreListaHora` en `data/config.js`, hora de Madrid).
 
 ### Protección contra abusos
@@ -97,7 +96,7 @@ Además tiene dos pestañas:
 
 Lo que se cambia en el panel se guarda en la base de datos (tabla `web_contenido`) y la web lo recibe en `/api/web.js`.
 
-Las reservas se gestionan en Supabase (ver **Reservas**) y los RPPs, en Supabase o en `admin-lista.html`.
+Las reservas se gestionan en Supabase (ver **Reservas**) y los RPPs, en Supabase (ver **Lista y RPPs**).
 
 ### Configurar el Google Apps Script (una vez)
 El panel necesita el id de cada carpeta y poder subir fotos a Drive. El código completo está en `google-apps-script/Codigo.gs`:

@@ -234,7 +234,8 @@
   /* =========================================================
      MODO LIGERO: sin aceleración por hardware (o en equipos lentos) los focos,
      el brillo de los botones y el del cursor bajan la portada a ~14 fps.
-     Se miden los fps un segundo y, si no llegan a 40, se apagan esos efectos.
+     Se apagan si el móvil tiene 2 GB de memoria o menos, o si no llegan a 50 fps:
+     se mide un segundo quieto en la portada y durante los primeros deslizamientos.
      El resultado se guarda junto al renderizador gráfico: el navegador restaura
      sessionStorage al reabrir las pestañas, y si entretanto se ha activado la
      aceleración por hardware el renderizador cambia y se vuelve a medir.
@@ -255,32 +256,93 @@
 
   function initModoLigero() {
     if (reducedMotion) return;
-    const activar = () => document.documentElement.classList.add("fx-ligero");
     const gpu = renderizadorGrafico();
+    let activo = false;
+    const activar = () => {
+      if (activo) return;
+      activo = true;
+      document.documentElement.classList.add("fx-ligero");
+      try { sessionStorage.setItem(LIGERO_KEY, gpu); } catch (e) { /* vale solo para esta carga */ }
+    };
     try {
       const guardado = sessionStorage.getItem(LIGERO_KEY);
       if (guardado === gpu) return activar();
       if (guardado) sessionStorage.removeItem(LIGERO_KEY);
     } catch (e) { /* sin almacenamiento */ }
 
-    // Se espera a que acabe la entrada del título para no medir la carga de la página
+    // Móviles con 2 GB de memoria o menos (solo lo dicen Chrome y Android): ligero desde el principio
+    if (navigator.deviceMemory && navigator.deviceMemory <= 2) return activar();
+
+    // Lento = la mediana de los fotogramas pasa de 20 ms (menos de 50 fps)
+    const lento = (tiempos) => {
+      const orden = [...tiempos].sort((a, b) => a - b);
+      return orden[orden.length >> 1] > 20;
+    };
+
+    // 1) Quieto en la portada, cuando acaba la entrada del título (para no medir la carga de la página)
     setTimeout(() => {
-      if (document.visibilityState !== "visible") return;
+      if (activo || document.visibilityState !== "visible") return;
       const tiempos = [];
       let ultimo = 0;
       const medir = (ahora) => {
         if (ultimo) tiempos.push(ahora - ultimo);
         ultimo = ahora;
         if (tiempos.length < 120 && tiempos.reduce((a, b) => a + b, 0) < 1000) return requestAnimationFrame(medir);
-        if (document.visibilityState !== "visible" || tiempos.length < 5) return;
-        tiempos.sort((a, b) => a - b);
-        if (tiempos[tiempos.length >> 1] > 25) {
-          activar();
-          try { sessionStorage.setItem(LIGERO_KEY, gpu); } catch (e) { /* vale solo para esta carga */ }
-        }
+        if (document.visibilityState === "visible" && tiempos.length >= 5 && lento(tiempos)) activar();
       };
       requestAnimationFrame(medir);
     }, 2500);
+
+    // 2) Durante los primeros deslizamientos, que es cuando más se nota: 90 fotogramas con la página moviéndose
+    const enScroll = [];
+    let listo = true, ultimoScroll = 0;   // listo: esperando a que se deslice para medir
+    const medirScroll = () => {
+      if (!listo) return;
+      listo = false;
+      let ultimo = 0;
+      const paso = (ahora) => {
+        if (ultimo && ahora - ultimo < 250) enScroll.push(ahora - ultimo);   // un salto largo es una pausa, no un fotograma
+        ultimo = ahora;
+        if (enScroll.length >= 90) {
+          window.removeEventListener("scroll", alDeslizar);
+          if (!activo && lento(enScroll)) activar();
+          return;
+        }
+        if (performance.now() - ultimoScroll < 200) requestAnimationFrame(paso);
+        else listo = true;   // se ha parado: sigue al volver a deslizar
+      };
+      requestAnimationFrame(paso);
+    };
+    const alDeslizar = () => {
+      ultimoScroll = performance.now();
+      if (activo) return window.removeEventListener("scroll", alDeslizar);
+      medirScroll();
+    };
+    window.addEventListener("scroll", alDeslizar, { passive: true });
+  }
+
+  /* =========================================================
+     PAUSAS: las animaciones en bucle (focos, bordes de los botones, cintas, parpadeo…)
+     se paran cuando su sección no se ve y, en pantallas táctiles, mientras se desliza.
+     Cada animación que corre obliga al móvil a componer la página en cada fotograma.
+     Las reglas están en css/styles.css (.fx-fuera y .fx-desliza)
+     ========================================================= */
+  function initPausas() {
+    if (reducedMotion) return;
+    if ("IntersectionObserver" in window) {
+      const vigia = new IntersectionObserver((entradas) => {
+        for (const e of entradas) e.target.classList.toggle("fx-fuera", !e.isIntersecting);
+      });
+      document.querySelectorAll(".hero, .marquee-wrap, .section").forEach((n) => vigia.observe(n));
+    }
+    if (finePointer) return;
+    const raiz = document.documentElement;
+    let parar = 0;
+    window.addEventListener("scroll", () => {
+      if (!parar) raiz.classList.add("fx-desliza");
+      clearTimeout(parar);
+      parar = setTimeout(() => { raiz.classList.remove("fx-desliza"); parar = 0; }, 180);
+    }, { passive: true });
   }
 
   /* =========================================================
@@ -1954,6 +2016,7 @@
     initParallax();
     initPointerFx();
     initModoLigero();
+    initPausas();
 
     // Enlace directo a un día: index.html#dia=2026-10-17
     const m = location.hash.match(/^#dia=(\d{4}-\d{2}-\d{2})$/);

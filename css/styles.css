@@ -36,7 +36,14 @@
   --font-logo: "Poiret One", system-ui, sans-serif;
   --font-display: "Unbounded", "Space Grotesk", system-ui, sans-serif;
   --font: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Fondo de hojas de la portada y de reservados: el navegador solo descarga la versión que encaja.
+     Pantalla vertical: recorte central a resolución completa; horizontal: 1600 o 2560 px de ancho.
+     Las mismas condiciones están en el <link rel="preload"> de index.html */
+  --hojas-arriba: url("../img/brand/hojas-arriba-1600.webp");
 }
+@media (min-width: 1281px) { :root { --hojas-arriba: url("../img/brand/hojas-arriba-2560.webp"); } }
+@media (max-aspect-ratio: 3/4) { :root { --hojas-arriba: url("../img/brand/hojas-arriba-movil.webp"); } }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 60px; } /* alto de .topbar.scrolled */
@@ -306,13 +313,13 @@ button { font: inherit; color: inherit; }
 .hero-back {
   top: -10%; bottom: -10%;
   z-index: -4;
-  background: url("../img/brand/hojas-arriba.jpg?v=2") center top / cover no-repeat;
+  background: var(--hojas-arriba) center top / cover no-repeat;
   filter: saturate(1.15) brightness(.8);
 }
 .hero-front {
   bottom: -6%; height: 48%;
   z-index: -2;
-  background: url("../img/brand/hojas-abajo.jpg?v=2") center bottom / cover no-repeat;
+  background: url("../img/brand/hojas-abajo.webp") center bottom / cover no-repeat;
   -webkit-mask-image: linear-gradient(to top, #000 35%, transparent);
   mask-image: linear-gradient(to top, #000 35%, transparent);
   opacity: .55;
@@ -557,7 +564,7 @@ button { font: inherit; color: inherit; }
 .cover img { width: 100%; height: 100%; object-fit: cover; }
 .cover-fallback {
   width: 100%; height: 100%;
-  background: url("../img/brand/botanic.jpg") center / cover no-repeat;
+  background: url("../img/brand/botanic-480.webp") center / cover no-repeat;
 }
 
 /* ---------- Calendario ---------- */
@@ -986,11 +993,11 @@ img.rota { opacity: 0; }
   position: absolute; top: -12%; bottom: -12%; left: 0; right: 0; z-index: -1;
   background:
     linear-gradient(90deg, var(--bg) 0%, rgba(5,16,13,.92) 40%, rgba(5,16,13,.4) 100%),
-    url("../img/brand/hojas-arriba.jpg?v=2") right center / cover no-repeat;
+    var(--hojas-arriba) right center / cover no-repeat;
   will-change: transform;
 }
 @media (max-width: 760px) {
-  .vip-bg { background: linear-gradient(180deg, rgba(5,16,13,.75), rgba(5,16,13,.95)), url("../img/brand/hojas-arriba.jpg?v=2") center / cover no-repeat; }
+  .vip-bg { background: linear-gradient(180deg, rgba(5,16,13,.75), rgba(5,16,13,.95)), var(--hojas-arriba) center / cover no-repeat; }
 }
 /* En una columna el panel alarga la sección: el fondo tiene alto fijo para no recolocarse al abrirlo */
 @media (max-width: 859px) {

@@ -8,6 +8,8 @@
    ========================================================= */
 "use strict";
 
+const crypto = require("node:crypto");
+
 const ID_DRIVE = /^[A-Za-z0-9_-]{10,100}$/;
 const INSTAGRAM = /^https:\/\/(www\.)?instagram\.com\/[^\s"'<>]{1,200}$/;
 const TIPOS_FOTO = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
@@ -71,8 +73,18 @@ function crearContenido({ almacen, cal, drive }) {
     if (id && drive.configurado) drive.borrar(id).catch((e) => console.error(e.message));
   }
 
-  /* ---------- Script público para la web ---------- */
-  const script = () => `window.BOTANIC_WEB = ${JSON.stringify(datos)};\n`;
+  /* ---------- Script público para la web ----------
+     Se genera una sola vez por cada cambio (datos es un objeto nuevo tras cada guardado),
+     con su ETag para que el navegador pueda preguntar «¿ha cambiado?» y recibir un 304 */
+  let publicado = { de: null, texto: "", etag: "" };
+  function publico() {
+    if (publicado.de !== datos) {
+      const texto = `window.BOTANIC_WEB = ${JSON.stringify(datos)};\n`;
+      publicado = { de: datos, texto, etag: `"${crypto.createHash("sha256").update(texto).digest("base64url").slice(0, 27)}"` };
+    }
+    return publicado;
+  }
+  const script = () => publico().texto;
 
   /* ---------- Eventos ---------- */
   async function guardarEvento(fecha, d) {
@@ -177,6 +189,7 @@ function crearContenido({ almacen, cal, drive }) {
     dias: () => datos.dias,
     todo: () => datos,
     script,
+    publico,
     guardarEvento: enCola(guardarEvento),
     borrarEvento: enCola(borrarEvento),
     subirFoto,

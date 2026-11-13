@@ -33,6 +33,7 @@ server/                          Servidor (server.js, lista.js, reservas.js, adm
   formulario.js                  Token de seguridad de los formularios
   contenido.js                   Eventos, días y ajustes de galería del panel (/api/web.js)
   drive.js                       Subida de fotos de eventos a Drive vía Apps Script
+  galeria.js                     Copia de los álbumes de Drive para la web (/api/galeria), renovada cada 10 min
   almacen-supabase.js            Datos en Supabase (producción)
   almacen.js                     Datos en JSON (local y pruebas)
   comprobar-supabase.js          npm run comprobar-supabase
@@ -145,13 +146,18 @@ La galería lee las carpetas de Google Drive a través del Google Apps Script de
 1. Crea una carpeta nueva en Drive (su nombre es el título del álbum) y sube las fotos.
 2. Las fotos tienen que estar compartidas como "Cualquier persona con el enlace" para que se vean en la web.
 3. Portada: la elegida en el panel; si no hay, la foto llamada `portada` (`portada.jpg`, `portada.png`…); si tampoco, la primera.
-4. No hace falta tocar la web: el álbum aparece solo al recargar. Una carpeta vacía no se muestra.
+4. No hace falta tocar la web: el álbum aparece solo en 10 minutos como mucho (el servidor guarda una copia de la lista de álbumes para no llamar a Google en cada visita; reiniciar el servidor la renueva al momento). El panel siempre ve la lista al día. Una carpeta vacía no se muestra.
 5. Los álbumes salen del más reciente al más antiguo (los anclados en el panel, primero). Se ven los que caben en una fila y el resto con "Ver galería".
 
 ### Cerrar o abrir un día concreto
 Panel → **Eventos y calendario** → pulsa el día → "Abrir" o "Cerrar". (También se puede con `cerrado` y `aperturasExtra` en `data/config.js`; lo del panel manda.)
 
 ## Publicar
+**Caché y compresión.** El servidor comprime HTML, CSS y JS (brotli o gzip) y manda un `ETag` con cada archivo, así que una visita repetida solo pregunta «¿ha cambiado?» y recibe un 304 sin cuerpo. Por eso, al cambiar un archivo:
+- **CSS o JS con `?v=` en el HTML** (`styles.css?v=18`, `app.js?v=19`…): subid el número en el HTML. Con `?v=` el navegador guarda el archivo un año sin preguntar.
+- **Imágenes de `img/`**: se guardan una semana. Para cambiar una, usad otro nombre de archivo (o añadid `?v=`).
+- HTML, `data/*.js` y `js/compartido/*.js`: se ven al momento.
+
 La lista necesita un hosting que ejecute Node.js (Render, Railway, un VPS…); GitHub Pages no sirve. Define `ADMIN_KEY`, `FORM_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `DRIVE_SCRIPT_CLAVE` y, detrás de un proxy, `TRUST_PROXY=1`. También con el túnel de Cloudflare (`cloudflared`): sin `TRUST_PROXY=1` todas las visitas llegan desde la misma IP y comparten los límites. Con él, la IP de cada visitante se lee del final de `X-Forwarded-For`, que es la que añade el proxy. Sin Supabase, los datos se guardan en archivos JSON, que en estos hostings se pierden al redesplegar.
 
 ## Flujo de trabajo (2 personas)

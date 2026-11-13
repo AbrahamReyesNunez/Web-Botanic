@@ -291,18 +291,6 @@ function crearServidor(opciones = {}) {
         return responder(res, await admin.actualizarRpp(rppAdminMatch[1], datos));
       }
       if (m === "DELETE" && rppAdminMatch) return responder(res, await admin.eliminarRpp(rppAdminMatch[1]));
-      if (m === "GET" && ruta === "/api/admin/export.csv") {
-        const fecha = url.searchParams.get("fecha");
-        const texto = await admin.csv(fecha);
-        if (texto === null) return enviar(res, 400, { ok: false, error: "Fecha no válida." });
-        res.writeHead(200, {
-          ...CABECERAS_SEGURIDAD,
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="lista-${fecha}.csv"`,
-          "Cache-Control": "no-store"
-        });
-        return res.end(texto);
-      }
       const borrarMatch = ruta.match(/^\/api\/admin\/inscripcion\/([^/]+)$/);
       if (m === "DELETE" && borrarMatch) return responder(res, await admin.borrar(borrarMatch[1]));
     }

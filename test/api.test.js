@@ -146,7 +146,7 @@ test("límite de altas por IP", async () => {
   } finally { await s.cerrar(); }
 });
 
-test("panel admin: acceso, recuento, CSV y borrado", async () => {
+test("panel admin: acceso, recuento y borrado", async () => {
   const s = await arrancar();
   try {
     await inscribir(s.base, { nombre: "Ana Ruiz", rpp: "aaaa1111" });
@@ -167,9 +167,6 @@ test("panel admin: acceso, recuento, CSV y borrado", async () => {
     const porNombre = Object.fromEntries(res.porRpp.map((g) => [g.nombre, g.total]));
     assert.deepEqual(porNombre, { "Prueba 1": 2, "Prueba 2": 0, "Inactivo": 0, "Sin RPP": 1 });
     assert.equal(res.inscripciones[0].rppCodigo, "aaaa1111");
-
-    const csv = await (await fetch(`${s.base}/api/admin/export.csv?fecha=${NOCHE}`, h)).text();
-    assert.match(csv, /Ana Ruiz;Prueba 1/);
 
     const id = res.inscripciones[0].id;
     assert.equal((await fetch(`${s.base}/api/admin/inscripcion/${id}`, { method: "DELETE", ...h })).status, 200);

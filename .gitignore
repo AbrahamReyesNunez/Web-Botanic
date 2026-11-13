@@ -18,3 +18,6 @@ data/db/contenido.json
 data/db/*.tmp
 .env
 node_modules/
+
+# Revisiones con detalles de seguridad: no se suben mientras haya fallos sin arreglar (el repo es público)
+documentacion/revision-*.md

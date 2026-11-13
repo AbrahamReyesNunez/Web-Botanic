@@ -342,3 +342,15 @@ test("archivos privados y rutas con ../ no se sirven", async () => {
     assert.match((await fetch(`${s.base}/api/no-existe`)).headers.get("content-type"), /application\/json/);
   } finally { await s.cerrar(); }
 });
+
+test("un cuerpo JSON que no es un objeto (null, lista, número) recibe 400 y no deja la petición colgada (E10)", async () => {
+  const s = await arrancar();
+  try {
+    for (const cuerpo of ["null", "[]", "42", "\"texto\"", "true"]) {
+      for (const ruta of ["/api/lista", "/api/reservas", "/api/admin/login"]) {
+        const r = await fetch(`${s.base}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo, signal: AbortSignal.timeout(3000) });
+        assert.equal(r.status, 400, `${ruta} ${cuerpo}`);
+      }
+    }
+  } finally { await s.cerrar(); }
+});

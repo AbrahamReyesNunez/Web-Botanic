@@ -195,10 +195,15 @@ function crearServidor(opciones = {}) {
       });
       req.on("end", () => {
         if (cortado) return;
-        try { resolve(JSON.parse(Buffer.concat(trozos).toString("utf8"))); } catch (e) {
-          enviar(res, 400, { ok: false, error: "JSON no válido." });
-          resolve(null);
+        let datos;
+        try { datos = JSON.parse(Buffer.concat(trozos).toString("utf8")); } catch (e) { datos = undefined; }
+        // Solo objetos: null es JSON válido, pero aquí null significa "ya he respondido con un error",
+        // y la petición se quedaba sin respuesta
+        if (datos === null || typeof datos !== "object" || Array.isArray(datos)) {
+          enviar(res, 400, { ok: false, error: datos === undefined ? "JSON no válido." : "Se esperaba un objeto JSON." });
+          return resolve(null);
         }
+        resolve(datos);
       });
       req.on("error", () => resolve(null));
     });
@@ -422,6 +427,12 @@ function crearServidor(opciones = {}) {
       if (!res.headersSent) enviar(res, 500, { ok: false, error: "Error interno." });
     }
   });
+
+  // Ninguna conexión se queda abierta sin límite: cabeceras en 20 s; la petición entera (fotos de 6 MB
+  // del panel incluidas) en 2 min; y una conexión sin movimiento se cierra a los 2 min
+  servidor.headersTimeout = 20_000;
+  servidor.requestTimeout = 120_000;
+  servidor.setTimeout(120_000);
 
   servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); });
   servidor.almacen = almacen;

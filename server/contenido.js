@@ -40,19 +40,41 @@ function tipoReal(buf) {
   return null;
 }
 
-function crearContenido({ almacen, cal, drive }) {
+function crearContenido({ almacen, cal, drive, reintentoMs = 5000 }) {
   let datos = vacio();
-  // Se carga al arrancar; hasta entonces la web ve el contenido vacío
-  const listo = almacen.leerContenido()
-    .then((c) => { datos = { ...vacio(), ...c }; })
-    .catch((e) => console.error(faltaTabla(e)
-      ? `\n  ✘ Falta la tabla web_contenido en Supabase: el panel no podrá guardar eventos, días ni ajustes de la galería.\n    Ejecuta supabase/migrations/005_web_contenido.sql en Supabase → SQL Editor → New query → Run y reinicia el servidor.\n`
-      : `No se pudo leer el contenido de la web: ${e.message}`));
+  // Se carga al arrancar. Si la base de datos falla, se reintenta (5 s, 10 s… hasta cada minuto) y, mientras,
+  // cargado() es false: la lista, las reservas y el panel no guardan nada. Si no, las noches cerradas desde
+  // el panel volverían a admitir altas, y el siguiente guardado del panel borraría lo que había
+  let cargado = false;
+  let fallos = 0;
+  const listo = new Promise((resolve) => {
+    const intentar = () => almacen.leerContenido().then((c) => {
+      datos = { ...vacio(), ...c };
+      cargado = true;
+      if (fallos) console.log("  ✔ Contenido de la web leído de la base de datos.");
+      resolve();
+    }, (e) => {
+      if (faltaTabla(e)) {
+        // Sin la tabla no hay nada que leer: la web funciona y el panel avisa al guardar
+        console.error(`\n  ✘ Falta la tabla web_contenido en Supabase: el panel no podrá guardar eventos, días ni ajustes de la galería.\n    Ejecuta supabase/migrations/005_web_contenido.sql en Supabase → SQL Editor → New query → Run y reinicia el servidor.\n`);
+        cargado = true;
+        return resolve();
+      }
+      fallos++;
+      const espera = Math.min(60_000, reintentoMs * fallos);
+      console.error(`  ✘ No se pudo leer el contenido de la web (${e.message}). Se reintenta en ${Math.round(espera / 1000)} s; mientras, la lista, las reservas y el panel no guardan nada.`);
+      resolve();   // el servidor arranca igual
+      setTimeout(intentar, espera).unref();
+    });
+    intentar();
+  });
+  const NO_CARGADO = "Todavía no se ha podido leer el contenido de la web de la base de datos. Inténtalo de nuevo en un momento.";
 
   // Los cambios van de uno en uno: cada uno parte de lo que dejó el anterior.
   // Si la base de datos falla, el panel recibe un mensaje claro en vez de "Error interno"
   let cola = Promise.resolve();
   const enCola = (fn) => (...args) => {
+    if (!cargado) return Promise.resolve(error(503, NO_CARGADO));
     const p = cola.then(() => fn(...args)).catch((e) => {
       console.error(e);
       if (faltaTabla(e)) return error(503, "Falta la tabla web_contenido en la base de datos. Ejecuta supabase/migrations/005_web_contenido.sql en Supabase → SQL Editor y reinicia el servidor.");
@@ -190,6 +212,7 @@ function crearContenido({ almacen, cal, drive }) {
     todo: () => datos,
     script,
     publico,
+    cargado: () => cargado,
     guardarEvento: enCola(guardarEvento),
     borrarEvento: enCola(borrarEvento),
     subirFoto,

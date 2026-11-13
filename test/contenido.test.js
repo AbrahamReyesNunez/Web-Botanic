@@ -204,3 +204,33 @@ test("si falta la migración 006, guardar el estilo da un mensaje claro", async 
     assert.match(r.cuerpo.error, /006_tema_web\.sql/);
   } finally { console.error = errorOriginal; }
 });
+
+test("si al arrancar falla la lectura del contenido, no se guarda nada hasta leerlo y se reintenta (E11)", async () => {
+  const { crearContenido } = require("../server/contenido.js");
+  const crearCalendario = require("../public/js/compartido/calendario.js");
+  let fallar = true;
+  const guardados = [];
+  const almacen = {
+    leerContenido: async () => {
+      if (fallar) throw new Error("Supabase caído");
+      return { eventos: {}, dias: { [NOCHE]: "cerrado" }, galeria: {}, ajustes: {} };
+    },
+    guardarContenido: async (seccion, valor) => { guardados.push(seccion); }
+  };
+  const errores = console.error;
+  console.error = () => {};
+  try {
+    const contenido = crearContenido({ almacen, cal: crearCalendario({}, AHORA), drive: driveFalso(), reintentoMs: 20 });
+    await contenido.listo;   // el servidor arranca igual
+    assert.equal(contenido.cargado(), false);
+    const r = await contenido.guardarDia("2026-10-15", { estado: "cerrado" });
+    assert.equal(r.status, 503);
+    assert.equal(guardados.length, 0, "no pisa lo que hay en la base de datos");
+
+    fallar = false;
+    for (let i = 0; i < 50 && !contenido.cargado(); i++) await new Promise((ok) => setTimeout(ok, 20));
+    assert.equal(contenido.cargado(), true);
+    assert.equal(contenido.todo().dias[NOCHE], "cerrado");
+    assert.equal((await contenido.guardarDia("2026-10-15", { estado: "cerrado" })).status, 200);
+  } finally { console.error = errores; }
+});

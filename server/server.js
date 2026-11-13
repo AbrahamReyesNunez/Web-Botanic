@@ -337,6 +337,11 @@ function crearServidor(opciones = {}) {
       return r ? enviar(res, 200, { ok: true, codigo: r.codigo, nombre: r.nombre }) : enviar(res, 404, { ok: false, error: "RPP no encontrado." });
     }
 
+    // Sin el contenido del panel no se sabe qué noches están cerradas: no se apunta ni se reserva nada
+    if (m === "POST" && (ruta === "/api/lista" || ruta === "/api/reservas") && !contenido.cargado()) {
+      return enviar(res, 503, { ok: false, error: "Ahora mismo no podemos guardar tu petición. Inténtalo de nuevo en un momento." }, { "Retry-After": "30" });
+    }
+
     if (m === "POST" && ruta === "/api/lista") {
       const datos = await leerJSON(req, res);
       if (datos === null) return;

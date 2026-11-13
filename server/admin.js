@@ -11,13 +11,6 @@ const DURACION_SESION = 12 * 60 * 60 * 1000;
 
 const hash = (s) => crypto.createHash("sha256").update(String(s)).digest();
 
-/* Evita que Excel interprete un nombre como fórmula */
-const celdaCSV = (v) => {
-  let s = String(v ?? "");
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
-  return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-
 function crearAdmin({ almacen, cal, claveAdmin }) {
   const sesiones = new Map(); // token -> caducidad
   const intentosLogin = crearLimitador([{ ms: 15 * 60 * 1000, max: 5 }]);
@@ -192,21 +185,13 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
       : { status: 404, cuerpo: { ok: false, error: "RPP no encontrado." } };
   }
 
-  async function csv(fecha) {
-    if (!cal.esClaveValida(fecha)) return null;
-    const [lista, rpps] = await Promise.all([almacen.deNoche(fecha), nombresRpp()]);
-    const filas = [["Nombre", "RPP", "Inscrito"]];
-    for (const x of lista) filas.push([x.nombre, rpps.nombre(x.rpp), x.creado]);
-    return "﻿" + filas.map((f) => f.map(celdaCSV).join(";")).join("\r\n");
-  }
-
   async function borrar(id) {
     if (!/^[0-9a-f-]{36}$/.test(id)) return { status: 400, cuerpo: { ok: false, error: "Id no válido." } };
     const ok = await almacen.borrar(id);
     return ok ? { status: 200, cuerpo: { ok: true } } : { status: 404, cuerpo: { ok: false, error: "No existe." } };
   }
 
-  return { autorizado, login, logout, noches, resumen, reservas, rpps, crearRpp, actualizarRpp, eliminarRpp, csv, borrar, cerrar: () => intentosLogin.cerrar() };
+  return { autorizado, login, logout, noches, resumen, reservas, rpps, crearRpp, actualizarRpp, eliminarRpp, borrar, cerrar: () => intentosLogin.cerrar() };
 }
 
 module.exports = { crearAdmin };

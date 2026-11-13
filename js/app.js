@@ -12,10 +12,9 @@
 
   const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-  const EXT_PORTADA = ["jpg", "jpeg", "png", "webp"];
   const STORAGE_KEY = "botanic_lista";
 
-  const $ = (sel, ctx = document) => ctx.querySelector(sel);
+  const { $, esc } = window.BotanicDom;   // js/compartido/dom.js
   const el = (tag, attrs = {}, html = "") => {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -27,7 +26,6 @@
     if (html) n.innerHTML = html;
     return n;
   };
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   /* Contenido interno de los botones .btn (texto + flecha que aparece al pasar el ratón) */
   const btnHTML = (texto, flecha = "→") =>
@@ -78,7 +76,6 @@
     // Foto subida desde el panel (Google Drive), con la URL alternativa por si falla la primera
     if (ev && ev.foto) candidatos.push(driveThumb(ev.foto, "w1200"), driveAlternativa(ev.foto, "w1200"));
     if (ev && ev.portada) candidatos.push(ev.portada);
-    EXT_PORTADA.forEach((ext) => candidatos.push(`img/portadas/${k}.${ext}`));
     const p = (async () => {
       for (const url of candidatos) {
         const ok = await probe(url);

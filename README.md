@@ -4,7 +4,7 @@ Web de la discoteca con agenda, galería, mesas VIP y **lista por RPP**. Un pequ
 
 ## Arrancar en local
 
-Requisito: [Node.js](https://nodejs.org) 20 o superior.
+Requisito: [Node.js](https://nodejs.org) 22 o superior (lo exige `@supabase/supabase-js`; en el hosting, elegid también Node 22 o superior).
 
 ```
 npm install                 # instala la librería de Supabase
@@ -21,11 +21,11 @@ Si abres `index.html` directamente (sin servidor), la web se ve, pero la lista n
 
 ```
 index.html · admin.html          Web pública y panel de la web (eventos, días y galería)
-admin-lista.html                 Panel anterior de lista, RPPs y reservados (sin enlazar)
 css/styles.css · css/admin.css   Estilos
 js/app.js                        Calendario, lista, galería, efectos
-js/admin.js · js/admin-lista.js  Panel de la web · panel anterior
-js/compartido/                   Código que usan la web y el servidor
+js/admin.js                      Panel de la web
+js/compartido/                   Código compartido (web, panel y servidor)
+  dom.js                         $ y esc() de la web y el panel
   calendario.js                  Días de apertura y cierre de lista
   nombre.js                      Filtro y normalización de nombres
   reservas.js                    Precios, buscador y teléfono de las reservas
@@ -42,7 +42,8 @@ data/reservados.js               Mesas, precios y bebidas de los reservados (con
 data/eventos.js                  Nombre por defecto de cada noche (los eventos se crean en el panel)
 google-apps-script/Codigo.gs     Código del Google Apps Script de la galería (se pega en Apps Script)
 data/db/                         Solo en modo JSON: rpps.json, mesas.json, inscripciones.json, reservas.json y contenido.json (las tres últimas no se suben)
-img/                             Logo y portadas (las fotos de la galería están en Google Drive)
+                                 rpps.json trae RPP de prueba solo para desarrollo: los reales van en Supabase
+img/                             Logo y fondos (las portadas y las fotos de la galería están en Google Drive)
 test/                            Pruebas (node --test)
 ```
 
@@ -53,7 +54,7 @@ test/                            Pruebas (node --test)
   - Cada RPP tiene además un link de reservados (`https://dominio/?reserva=CÓDIGO`): abre la web en la sección de reservados y la reserva queda asignada a ese RPP. Cada link cuenta solo para lo suyo.
   - Sin link queda en **"Sin RPP"**, así nadie puede asignarse un RPP a mano.
 - **Añadir un RPP:** en Supabase → **Table Editor → rpps → Insert row**, escribe solo su `nombre` (el `codigo` del link se genera solo y no puede haber dos RPP con el mismo nombre). Para desactivarlo, pon `activo` en `false` (no borres la fila: sus inscripciones se conservan). El cambio tarda hasta 30 s en verse. En modo JSON se hace igual en `data/db/rpps.json`.
-- **Panel anterior** (`/admin-lista.html`, sin enlazar desde ningún sitio): inscritos por noche y por RPP con porcentajes, buscador, borrado de nombres colados, exportación a PDF, alta y edición de RPPs y los dos links de cada RPP (lista y reservados) para copiar. Su API (`/api/admin/...`) se mantiene para la futura app móvil.
+- **Ver la lista:** en Supabase → **Table Editor** (`inscripciones` por noche y RPP). La API de administración de lista, RPPs y reservas (`/api/admin/noches`, `resumen`, `reservas`, `rpps`, `rpp/:codigo` e `inscripcion/:id`) no tiene pantalla en la web: se mantiene para la futura app móvil.
 - La lista de un día se cierra a las 23:00 de ese día (`cierreListaHora` en `data/config.js`, hora de Madrid).
 
 ### Protección contra abusos
@@ -97,7 +98,7 @@ Además tiene dos pestañas:
 
 Lo que se cambia en el panel se guarda en la base de datos (tabla `web_contenido`) y la web lo recibe en `/api/web.js`.
 
-Las reservas se gestionan en Supabase (ver **Reservas**) y los RPPs, en Supabase o en `admin-lista.html`.
+Las reservas se gestionan en Supabase (ver **Reservas**) y los RPPs, en Supabase (ver **Lista y RPPs**).
 
 ### Configurar el Google Apps Script (una vez)
 El panel necesita el id de cada carpeta y poder subir fotos a Drive. El código completo está en `google-apps-script/Codigo.gs`:
@@ -171,4 +172,3 @@ git push -u origin feature/mi-cambio
 # Para publicar: pull request develop -> main.
 ```
 
-Las portadas y las fotos de la galería pueden subirse directamente a `develop`, sin rama propia.

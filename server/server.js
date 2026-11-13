@@ -442,5 +442,12 @@ if (require.main === module) {
     if (!process.env.DRIVE_SCRIPT_CLAVE) console.log("  Sin DRIVE_SCRIPT_CLAVE: el panel no podrá subir fotos de eventos a Drive (ver .env.example).");
     // La primera visita ya encuentra la galería en memoria
     if (servidor.galeria.configurada) servidor.galeria.refrescar().catch(() => {});
+    // Supabase gratuito pausa el proyecto tras 7 días sin actividad: una consulta cada 12 h lo evita
+    // mientras el servidor esté encendido. Si falla, se avisa (puede que ya esté pausado)
+    if (supabase) {
+      setInterval(() => servidor.almacen.latido().catch((e) => console.error(
+        `\n  ✘ Supabase no responde (${e.message}). Si el proyecto está pausado, reactívalo en supabase.com → tu proyecto → Restore.\n`
+      )), 12 * 60 * 60 * 1000).unref();
+    }
   }));
 }

@@ -143,27 +143,51 @@ test("API de reservas con Supabase: aforo completo, duplicado y alta", async () 
   }
 });
 
-test("recuento de reservas: lo cuenta la base de datos (007_recuento_reservas.sql)", async () => {
-  const cliente = clienteFalso({ rpc: () => ({ data: [{ fecha: "2026-10-14", total: "3" }], error: null }) });
-  assert.deepEqual(await crearAlmacenSupabase({ cliente }).recuentoReservas(), [{ fecha: "2026-10-14", total: 3 }]);
-  assert.equal(cliente.llamadas[0].rpc, "recuento_reservas");
-  assert.equal(cliente.llamadas.length, 1, "no descarga las reservas");
-});
-
-test("recuento de reservas sin la migración 007: se cuenta en el servidor y el panel sigue funcionando", async () => {
-  const cliente = clienteFalso({
-    tablas: { reservas: [{ fecha: "2026-10-14" }, { fecha: "2026-10-14" }, { fecha: "2026-10-15" }] },
-    rpc: () => ({ data: null, error: { message: "Could not find the function public.recuento_reservas without parameters in the schema cache" } })
-  });
+const DESDE = "2025-11-13";
+const HASTA = "2027-11-13";
+const sinFuncion = (nombre, conParametros) => ({ data: null, error: { message: `Could not find the function public.${nombre}${conParametros ? "(p_desde, p_hasta)" : " without parameters"} in the schema cache` } });
+const callado = async (fn) => {
   const aviso = console.warn;
   console.warn = () => {};
-  try {
-    const cuenta = Object.fromEntries((await crearAlmacenSupabase({ cliente }).recuentoReservas()).map((x) => [x.fecha, x.total]));
-    assert.deepEqual(cuenta, { "2026-10-14": 2, "2026-10-15": 1 });
-  } finally { console.warn = aviso; }
+  try { return await fn(); } finally { console.warn = aviso; }
+};
+
+test("recuentos del panel: los hace la base de datos solo entre las fechas pedidas (008_recuento_por_fechas.sql)", async () => {
+  const cliente = clienteFalso({ rpc: () => ({ data: [{ fecha: "2026-10-14", total: "3" }], error: null }) });
+  const a = crearAlmacenSupabase({ cliente });
+  assert.deepEqual(await a.recuentoReservas(DESDE, HASTA), [{ fecha: "2026-10-14", total: 3 }]);
+  assert.deepEqual(await a.recuentoNoches(DESDE, HASTA), [{ fecha: "2026-10-14", total: 3 }]);
+  assert.deepEqual(cliente.llamadas.map((x) => [x.rpc, x.params]), [
+    ["recuento_reservas", { p_desde: DESDE, p_hasta: HASTA }],
+    ["recuento_noches", { p_desde: DESDE, p_hasta: HASTA }]
+  ]);
+});
+
+test("recuentos sin la migración 008: usan las funciones anteriores y filtran las fechas aquí", async () => {
+  const cliente = clienteFalso({
+    rpc: (nombre, params) => params
+      ? sinFuncion(nombre, true)
+      : { data: [{ fecha: "2020-01-01", total: 9 }, { fecha: "2026-10-14", total: 3 }], error: null }
+  });
+  const a = crearAlmacenSupabase({ cliente });
+  assert.deepEqual(await callado(() => a.recuentoReservas(DESDE, HASTA)), [{ fecha: "2026-10-14", total: 3 }]);
+  assert.deepEqual(await callado(() => a.recuentoNoches(DESDE, HASTA)), [{ fecha: "2026-10-14", total: 3 }]);
+});
+
+test("recuento de reservas sin las migraciones 007 ni 008: se cuenta en el servidor y el panel sigue funcionando", async () => {
+  const cliente = clienteFalso({
+    tablas: { reservas: [{ fecha: "2026-10-14" }, { fecha: "2026-10-14" }, { fecha: "2026-10-15" }] },
+    rpc: (nombre, params) => sinFuncion(nombre, !!params)
+  });
+  const cuenta = Object.fromEntries((await callado(() => crearAlmacenSupabase({ cliente }).recuentoReservas(DESDE, HASTA))).map((x) => [x.fecha, x.total]));
+  assert.deepEqual(cuenta, { "2026-10-14": 2, "2026-10-15": 1 });
+  // La consulta de respaldo también se limita a las fechas
+  const pasos = cliente.llamadas.find((x) => x.tabla === "reservas").pasos;
+  assert.ok(pasos.some(([m, c, v]) => m === "gte" && c === "fecha" && v === DESDE));
+  assert.ok(pasos.some(([m, c, v]) => m === "lte" && c === "fecha" && v === HASTA));
   // Otros errores no se esconden
   const roto = clienteFalso({ rpc: () => ({ data: null, error: { message: "permission denied for function recuento_reservas" } }) });
-  await assert.rejects(crearAlmacenSupabase({ cliente: roto }).recuentoReservas(), /permission denied/);
+  await assert.rejects(crearAlmacenSupabase({ cliente: roto }).recuentoReservas(DESDE, HASTA), /permission denied/);
 });
 
 test("RPP con nombre repetido: el índice único de Supabase se traduce en un motivo para el panel", async () => {
@@ -174,4 +198,15 @@ test("RPP con nombre repetido: el índice único de Supabase se traduce en un mo
   // Otra clave duplicada (p. ej. el código) no se disfraza de nombre repetido
   const otro = crearAlmacenSupabase({ cliente: clienteFalso({ tablas: { rpps: () => ({ data: null, error: { code: "23505", message: 'duplicate key value violates unique constraint "rpps_pkey"' } }) } }) });
   await assert.rejects(otro.crearRpp({ codigo: "aaaa1111", nombre: "Laura" }), (e) => !e.motivo && /rpps_pkey/.test(e.message));
+});
+
+test("latido: una consulta mínima para que Supabase gratuito no pause el proyecto", async () => {
+  const cliente = clienteFalso({ tablas: { migraciones: [{ nombre: "001_inicial" }] } });
+  await crearAlmacenSupabase({ cliente }).latido();
+  assert.equal(cliente.llamadas.length, 1);
+  assert.equal(cliente.llamadas[0].tabla, "migraciones");
+  assert.deepEqual(cliente.llamadas[0].pasos.find(([m]) => m === "limit"), ["limit", 1]);
+  // Si Supabase falla, el error sale (el servidor lo escribe en el registro)
+  const caido = clienteFalso({ tablas: { migraciones: () => ({ data: null, error: { message: "project paused" } }) } });
+  await assert.rejects(crearAlmacenSupabase({ cliente: caido }).latido(), /project paused/);
 });

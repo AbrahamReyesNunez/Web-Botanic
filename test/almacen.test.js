@@ -41,6 +41,8 @@ test("recuento por noche y borrado", async () => {
 
     const recuento = Object.fromEntries((await a.recuentoNoches()).map((x) => [x.fecha, x.total]));
     assert.deepEqual(recuento, { "2026-10-14": 2, "2026-10-15": 1 });
+    // Con rango, como pide el panel: solo las noches entre las dos fechas
+    assert.deepEqual(await a.recuentoNoches("2026-10-15", "2027-10-15"), [{ fecha: "2026-10-15", total: 1 }]);
 
     assert.equal(await a.borrar(inscripcion.id), true);
     assert.equal(await a.borrar(inscripcion.id), false);

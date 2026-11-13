@@ -11,6 +11,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const crypto = require("node:crypto");
+const zlib = require("node:zlib");
+const { pipeline } = require("node:stream");
+const { promisify } = require("node:util");
 
 const crearCalendario = require("../js/compartido/calendario.js");
 const { crearAlmacen } = require("./almacen.js");
@@ -21,6 +24,7 @@ const { crearTokens } = require("./formulario.js");
 const { crearReservas } = require("./reservas.js");
 const { crearContenido } = require("./contenido.js");
 const { crearDrive } = require("./drive.js");
+const { crearGaleria } = require("./galeria.js");
 
 const RAIZ = path.resolve(__dirname, "..");
 const MAX_CUERPO = 1024;
@@ -36,6 +40,37 @@ const MIME = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
   ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon"
 };
+
+/* ---------- Caché del navegador y compresión de los archivos de la web ---------- */
+const COMPRIMIBLE = new Set([".html", ".css", ".js", ".json", ".svg"]);
+const IMAGEN = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".ico"]);
+const MAX_COMPRIMIR = 2 * 1024 * 1024;   // más grande que esto se envía tal cual
+const brotli = promisify(zlib.brotliCompress);
+const gzip = promisify(zlib.gzip);
+
+/* Brotli si el navegador lo acepta (≈ 75 % menos), si no gzip */
+function formatoAceptado(req) {
+  const acepta = String(req.headers["accept-encoding"] || "");
+  if (/\bbr\b(?!;q=0(\.0*)?\b)/.test(acepta)) return "br";
+  if (/\bgzip\b(?!;q=0(\.0*)?\b)/.test(acepta)) return "gzip";
+  return null;
+}
+
+/* CSS y JS llevan ?v= en el HTML: con la versión en la URL se pueden guardar un año sin preguntar.
+   Las imágenes, una semana (para cambiar una, cambiadle el nombre o añadid ?v=).
+   Lo demás (HTML, data/*.js…) se guarda pero se pregunta cada vez con el ETag: si no ha cambiado, 304 sin cuerpo */
+function cacheDe(ext, url) {
+  if (url && url.searchParams.has("v")) return "public, max-age=31536000, immutable";
+  if (IMAGEN.has(ext)) return "public, max-age=604800";
+  return "no-cache";
+}
+
+/* ¿El navegador ya tiene esta versión? (If-None-Match puede traer varias, con o sin W/) */
+function coincideEtag(req, etag) {
+  const pedido = req.headers["if-none-match"];
+  if (!pedido) return false;
+  return pedido.trim() === "*" || pedido.split(",").some((e) => e.trim().replace(/^W\//, "") === etag);
+}
 
 /* Rutas que nunca se sirven como archivos */
 const PRIVADO = /^\/(server|test|node_modules|supabase|documentacion|google-apps-script|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md)$|(^|\/)\./;
@@ -100,6 +135,7 @@ function crearServidor(opciones = {}) {
   const admin = crearAdmin({ almacen, cal, claveAdmin: opciones.claveAdmin });
   const drive = opciones.drive || crearDrive({ url: (cfg.galeria || {}).scriptUrl, clave: opciones.driveClave });
   contenido = crearContenido({ almacen, cal, drive });
+  const galeria = opciones.galeria || crearGaleria({ url: (cfg.galeria || {}).scriptUrl });
   const trustProxy = !!opciones.trustProxy;
 
   // Detrás de un proxy, la IP real es la ÚLTIMA de X-Forwarded-For: la añade el proxy.
@@ -173,16 +209,36 @@ function crearServidor(opciones = {}) {
     });
   }
 
-  /* Página 404 del sitio (las rutas /api/ siguen respondiendo JSON) */
+  /* Página 404 del sitio (las rutas /api/ siguen respondiendo JSON). Se lee del disco una sola vez */
+  let pagina404 = null;
   function noEncontrado(req, res) {
-    fs.readFile(path.join(RAIZ, "404.html"), (err, html) => {
-      if (err) return enviar(res, 404, { ok: false, error: "No encontrado." });
+    if (!pagina404) {
+      pagina404 = fs.promises.readFile(path.join(RAIZ, "404.html"));
+      pagina404.catch(() => { pagina404 = null; });   // si falla, se reintenta en el siguiente 404
+    }
+    pagina404.then((html) => {
       res.writeHead(404, { ...CABECERAS_SEGURIDAD, "Content-Type": MIME[".html"], "Content-Length": html.length, "Cache-Control": "no-cache" });
       res.end(req.method === "HEAD" ? undefined : html);
-    });
+    }, () => enviar(res, 404, { ok: false, error: "No encontrado." }));
   }
 
-  function servirArchivo(req, res, ruta) {
+  /* Archivos de texto comprimidos en memoria: { archivo → { version, br?, gzip? } } (Promise<Buffer> por formato).
+     Se rehacen solo si cambia el archivo (tamaño o fecha) */
+  const comprimidos = new Map();
+  function comprimido(archivo, st, formato) {
+    const version = `${st.size}-${st.mtimeMs}`;
+    let e = comprimidos.get(archivo);
+    if (!e || e.version !== version) comprimidos.set(archivo, e = { version });
+    if (!e[formato]) {
+      e[formato] = fs.promises.readFile(archivo).then((buf) => formato === "br"
+        ? brotli(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } })
+        : gzip(buf, { level: 9 }));
+      e[formato].catch(() => { if (comprimidos.get(archivo) === e) delete e[formato]; });
+    }
+    return e[formato];
+  }
+
+  function servirArchivo(req, res, ruta, url) {
     let rel;
     try { rel = decodeURIComponent(ruta); } catch (e) { rel = null; }
     if (rel === "/") rel = "/index.html";
@@ -190,16 +246,33 @@ function crearServidor(opciones = {}) {
     if (!rel || rel.includes("\0") || PRIVADO.test(rel) || !archivo.startsWith(RAIZ + path.sep)) {
       return noEncontrado(req, res);
     }
-    fs.stat(archivo, (err, st) => {
+    fs.stat(archivo, async (err, st) => {
       if (err || !st.isFile()) return noEncontrado(req, res);
-      res.writeHead(200, {
+      const ext = path.extname(archivo).toLowerCase();
+      const formato = COMPRIMIBLE.has(ext) && st.size <= MAX_COMPRIMIR ? formatoAceptado(req) : null;
+      // El ETag cambia si cambia el archivo; cada formato (br, gzip, sin comprimir) tiene el suyo
+      const etag = `"${st.size.toString(36)}-${Math.trunc(st.mtimeMs).toString(36)}${formato ? `-${formato}` : ""}"`;
+      const cabeceras = {
         ...CABECERAS_SEGURIDAD,
-        "Content-Type": MIME[path.extname(archivo).toLowerCase()] || "application/octet-stream",
-        "Content-Length": st.size,
-        "Cache-Control": "no-cache"
-      });
+        "Content-Type": MIME[ext] || "application/octet-stream",
+        "Cache-Control": cacheDe(ext, url),
+        ETag: etag,
+        ...(COMPRIMIBLE.has(ext) ? { Vary: "Accept-Encoding" } : {})
+      };
+      if (coincideEtag(req, etag)) {
+        res.writeHead(304, cabeceras);
+        return res.end();
+      }
+      if (formato) {
+        let cuerpo;
+        try { cuerpo = await comprimido(archivo, st, formato); } catch (e) { return noEncontrado(req, res); }
+        res.writeHead(200, { ...cabeceras, "Content-Encoding": formato, "Content-Length": cuerpo.length });
+        return res.end(req.method === "HEAD" ? undefined : cuerpo);
+      }
+      res.writeHead(200, { ...cabeceras, "Content-Length": st.size });
       if (req.method === "HEAD") return res.end();
-      fs.createReadStream(archivo).pipe(res);
+      // pipeline cierra el archivo aunque el visitante corte la descarga, y recoge los errores de lectura
+      pipeline(fs.createReadStream(archivo), res, () => {});
     });
   }
 
@@ -208,8 +281,30 @@ function crearServidor(opciones = {}) {
 
     // Contenido editable de la web (eventos, días y galería) como script: se carga antes que app.js
     if (m === "GET" && ruta === "/api/web.js") {
-      res.writeHead(200, { ...CABECERAS_SEGURIDAD, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-cache" });
-      return res.end(contenido.script());
+      const { texto, etag } = contenido.publico();
+      const cabeceras = { ...CABECERAS_SEGURIDAD, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-cache", ETag: etag };
+      if (coincideEtag(req, etag)) {
+        res.writeHead(304, cabeceras);
+        return res.end();
+      }
+      res.writeHead(200, cabeceras);
+      return res.end(texto);
+    }
+
+    // Álbumes de la galería: copia del Google Apps Script que el servidor renueva cada 10 min
+    if (m === "GET" && ruta === "/api/galeria") {
+      if (!galeria.configurada) return enviar(res, 503, { ok: false, error: "Falta galeria.scriptUrl en data/config.js." });
+      let copia;
+      try { copia = await galeria.obtener(); } catch (e) {
+        return enviar(res, 502, { ok: false, error: "No se ha podido leer la galería de Google Drive." });
+      }
+      const cabeceras = { ...CABECERAS_SEGURIDAD, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=300", ETag: copia.etag };
+      if (coincideEtag(req, copia.etag)) {
+        res.writeHead(304, cabeceras);
+        return res.end();
+      }
+      res.writeHead(200, cabeceras);
+      return res.end(copia.texto);
     }
 
     if (m === "GET" && ruta === "/api/form-token") return enviar(res, 200, { ok: true, token: tokens.crear() });
@@ -304,7 +399,7 @@ function crearServidor(opciones = {}) {
       const ruta = url.pathname;
       if (ruta.startsWith("/api/")) return await api(req, res, ruta, url);
       if (req.method !== "GET" && req.method !== "HEAD") return enviar(res, 405, { ok: false, error: "Método no permitido." });
-      servirArchivo(req, res, ruta);
+      servirArchivo(req, res, ruta, url);
     } catch (e) {
       console.error(e);
       if (!res.headersSent) enviar(res, 500, { ok: false, error: "Error interno." });
@@ -313,6 +408,7 @@ function crearServidor(opciones = {}) {
 
   servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); });
   servidor.almacen = almacen;
+  servidor.galeria = galeria;
   servidor.listo = contenido.listo;
   return servidor;
 }
@@ -344,5 +440,7 @@ if (require.main === module) {
     console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html`);
     console.log(supabase ? "  Datos: Supabase" : "  Datos: data/db (JSON). Para usar Supabase, define SUPABASE_URL y SUPABASE_SECRET_KEY.");
     if (!process.env.DRIVE_SCRIPT_CLAVE) console.log("  Sin DRIVE_SCRIPT_CLAVE: el panel no podrá subir fotos de eventos a Drive (ver .env.example).");
+    // La primera visita ya encuentra la galería en memoria
+    if (servidor.galeria.configurada) servidor.galeria.refrescar().catch(() => {});
   }));
 }

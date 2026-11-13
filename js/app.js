@@ -722,8 +722,9 @@
 
   /* =========================================================
      GALERÍA: álbumes de Google Drive
-     Cada carpeta de Drive es un álbum. Las lista un Google Apps Script (data/config.js → galeria.scriptUrl)
-     que devuelve [{ nombre, creado, fotos: [{ id, nombre }] }]
+     Cada carpeta de Drive es un álbum. Las lista un Google Apps Script (data/config.js → galeria.scriptUrl);
+     el servidor guarda una copia y la sirve en /api/galeria: { albumes: [{ id, nombre, creado, fotos: [{ id, nombre }] }] }.
+     Se pide solo cuando la galería se acerca a la pantalla (o se abre un #album= directamente)
        #galeria         → tarjetas de los álbumes
        #album=Nombre    → fotos de ese álbum, con visor y descarga
      ========================================================= */
@@ -758,7 +759,23 @@
     window.addEventListener("resize", ajustarFila);
     // El evento "error" de las imágenes no burbujea: se escucha en fase de captura
     document.addEventListener("error", fotoFallida, true);
-    window.addEventListener("hashchange", pintarGaleria);
+    window.addEventListener("hashchange", () => {
+      if (!gal.albumes && albumDelHash() !== null) cargarAlbumesUnaVez();
+      pintarGaleria();
+    });
+    if (albumDelHash() !== null || !("IntersectionObserver" in window)) return cargarAlbumesUnaVez();
+    const vigia = new IntersectionObserver((entradas) => {
+      if (!entradas.some((e) => e.isIntersecting)) return;
+      vigia.disconnect();
+      cargarAlbumesUnaVez();
+    }, { rootMargin: "800px 0px" });
+    vigia.observe($("#galeria"));
+  }
+
+  let albumesPedidos = false;
+  function cargarAlbumesUnaVez() {
+    if (albumesPedidos) return;
+    albumesPedidos = true;
     cargarAlbumes();
   }
 
@@ -783,14 +800,13 @@
     error.hidden = true;
     cargando.hidden = false;
 
-    // El script tarda unos segundos; si no responde en tiempoMaximo, se aborta
+    // Si el servidor aún no tiene copia, espera al Apps Script (unos segundos); pasado tiempoMaximo, se aborta
     const control = new AbortController();
     const temporizador = setTimeout(() => control.abort(), (GAL.tiempoMaximo || 45) * 1000);
     try {
-      if (!GAL.scriptUrl) throw new Error("falta galeria.scriptUrl en data/config.js");
-      const res = await fetch(GAL.scriptUrl, { signal: control.signal, referrerPolicy: "no-referrer" });
+      const res = await fetch("api/galeria", { signal: control.signal });
       if (!res.ok) throw new Error(`el servidor respondió ${res.status}`);
-      const datos = await res.json();
+      const datos = (await res.json()).albumes;
       if (!Array.isArray(datos)) throw new Error("la respuesta no tiene el formato esperado");
 
       // Solo álbumes con nombre y al menos una foto (una carpeta recién creada y vacía no sale), los más recientes primero

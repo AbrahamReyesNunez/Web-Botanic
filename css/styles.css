@@ -1705,6 +1705,15 @@ img.rota { opacity: 0; }
 }
 .fx-ligero .btn::after,
 .fx-ligero .neon-title { animation: none !important; }
+/* Sin aceleración por hardware, lo más caro es el desenfoque de fondo: en cada fotograma el procesador
+   desenfoca lo que hay detrás. En modo ligero no se desenfoca (esos fondos ya son casi opacos) */
+.fx-ligero .topbar.scrolled::before { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(5, 16, 13, .94); }
+.fx-ligero :is(.calendar, .res-modal, .res-barra) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Fondo de la portada sin filtro: brightness(.8) es lo mismo que un 20 % de negro por encima */
+.fx-ligero .hero-back {
+  filter: none;
+  background: linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)), var(--hojas-arriba) center top / cover no-repeat;
+}
 
 /* Animaciones en bucle en pausa: fuera de la pantalla (.fx-fuera en su sección, js/app.js initPausas)
    y, en pantallas táctiles, mientras se desliza la página (html.fx-desliza): así el scroll va fluido.

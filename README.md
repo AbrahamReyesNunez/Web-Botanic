@@ -4,7 +4,7 @@ Web de la discoteca con agenda, galería, mesas VIP y **lista por RPP**. Un pequ
 
 ## Arrancar en local
 
-Requisito: [Node.js](https://nodejs.org) 20 o superior.
+Requisito: [Node.js](https://nodejs.org) 22 o superior (lo exige `@supabase/supabase-js`; en el hosting, elegid también Node 22 o superior).
 
 ```
 npm install                 # instala la librería de Supabase

@@ -134,7 +134,7 @@ Supabase es una base de datos PostgreSQL en la nube con un panel web. Solo habla
 
 La clave secreta da acceso total a la base de datos: solo en `.env` y en las variables del hosting, nunca en el código, en el README ni en GitHub. Si se filtra, genera otra en el mismo panel.
 
-En el plan gratuito, Supabase pausa el proyecto tras 7 días sin actividad; se reactiva desde el panel.
+En el plan gratuito, Supabase pausa el proyecto tras 7 días sin actividad. Mientras el servidor esté encendido no pasa: hace una consulta mínima cada 12 horas (aunque no haya visitas en temporada baja) y, si Supabase no responde, lo escribe en el registro del servidor. Si se pausa, se reactiva desde el panel de Supabase → **Restore**.
 
 ## Tareas habituales
 

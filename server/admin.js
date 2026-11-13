@@ -8,6 +8,7 @@ const { crearLimitador } = require("./limites.js");
 
 const COOKIE = "botanic_admin";
 const DURACION_SESION = 12 * 60 * 60 * 1000;
+const DIAS_RECUENTO = 365;   // el panel cuenta las noches de un año atrás a un año adelante
 
 const hash = (s) => crypto.createHash("sha256").update(String(s)).digest();
 
@@ -60,9 +61,13 @@ function crearAdmin({ almacen, cal, claveAdmin }) {
     return { lista, nombre };
   }
 
-  /* Noches con inscripciones más las próximas abiertas, de más reciente a más antigua */
+  /* Noches con inscripciones o reservas (del último año al próximo) más las próximas abiertas,
+     de más reciente a más antigua. El rango evita que la base de datos agrupe todo el histórico */
   async function noches() {
-    const [listas, solicitudes] = await Promise.all([almacen.recuentoNoches(), almacen.recuentoReservas()]);
+    const hoy = cal.today();
+    const desde = cal.keyOf(cal.addDays(hoy, -DIAS_RECUENTO));
+    const hasta = cal.keyOf(cal.addDays(hoy, DIAS_RECUENTO));
+    const [listas, solicitudes] = await Promise.all([almacen.recuentoNoches(desde, hasta), almacen.recuentoReservas(desde, hasta)]);
     const cuenta = new Map(listas.map((x) => [x.fecha, { fecha: x.fecha, total: x.total, reservas: 0 }]));
     for (const x of solicitudes) {
       if (!cuenta.has(x.fecha)) cuenta.set(x.fecha, { fecha: x.fecha, total: 0, reservas: 0 });

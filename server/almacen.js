@@ -113,9 +113,9 @@ function crearAlmacen(dir) {
   /* Reservas de una noche con las bebidas agrupadas, igual que en Supabase (API de la app) */
   const reservasDeNoche = async (fecha) => reservas.filter((x) => x.fecha === fecha)
     .map(({ lineas, ...x }) => reservaDeFila({ ...x, reserva_lineas: lineas }));
-  const recuentoReservas = async () => {
+  const recuentoReservas = async (desde = "0000-00-00", hasta = "9999-99-99") => {
     const cuenta = new Map();
-    for (const x of reservas) cuenta.set(x.fecha, (cuenta.get(x.fecha) || 0) + 1);
+    for (const x of reservas) if (x.fecha >= desde && x.fecha <= hasta) cuenta.set(x.fecha, (cuenta.get(x.fecha) || 0) + 1);
     return [...cuenta].map(([fecha, total]) => ({ fecha, total }));
   };
 
@@ -160,9 +160,9 @@ function crearAlmacen(dir) {
     return operacion;
   }
 
-  function recuentoNoches() {
+  function recuentoNoches(desde = "0000-00-00", hasta = "9999-99-99") {
     const cuenta = new Map();
-    for (const x of inscripciones) cuenta.set(x.fecha, (cuenta.get(x.fecha) || 0) + 1);
+    for (const x of inscripciones) if (x.fecha >= desde && x.fecha <= hasta) cuenta.set(x.fecha, (cuenta.get(x.fecha) || 0) + 1);
     return [...cuenta].map(([fecha, total]) => ({ fecha, total }));
   }
 
@@ -232,7 +232,7 @@ function crearAlmacen(dir) {
     rpps: async () => rpps(),
     rppActivo: async (codigo) => rppActivo(codigo),
     deNoche: async (fecha) => deNoche(fecha),
-    recuentoNoches: async () => recuentoNoches(),
+    recuentoNoches: async (desde, hasta) => recuentoNoches(desde, hasta),
     reservasDeNoche,
     recuentoReservas,
     crearReserva,

@@ -86,9 +86,21 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     }
   }
 
-  async function recuentoNoches() {
-    const filas = datosDe(await db.rpc("recuento_noches"), "recuento por noche");
-    return filas.map((x) => ({ fecha: x.fecha, total: Number(x.total) }));
+  /* Recuentos por noche entre dos fechas (AAAA-MM-DD). Los hace la base de datos con la migración 008;
+     sin ella se usan las versiones anteriores, que cuentan todo el histórico, y se filtra aquí */
+  const faltaFuncion = (error, nombre) => new RegExp(nombre).test(error.message) && /schema cache|does not exist|Could not find/i.test(error.message);
+  const entre = (filas, desde, hasta) => filas
+    .filter((x) => x.fecha >= desde && x.fecha <= hasta)
+    .map((x) => ({ fecha: x.fecha, total: Number(x.total) }));
+  const avisos = new Set();
+  const avisar = (texto) => { if (!avisos.has(texto)) { avisos.add(texto); console.warn(`  ${texto}`); } };
+
+  async function recuentoNoches(desde, hasta) {
+    const { data, error } = await db.rpc("recuento_noches", { p_desde: desde, p_hasta: hasta });
+    if (!error) return entre(data, desde, hasta);
+    if (!faltaFuncion(error, "recuento_noches")) throw new Error(`Supabase (recuento por noche): ${error.message}`);
+    avisar("Falta la migración 008_recuento_por_fechas.sql en Supabase: el panel cuenta todo el histórico (más lento).");
+    return entre(datosDe(await db.rpc("recuento_noches"), "recuento por noche"), desde, hasta);
   }
 
   async function reservasDeNoche(fecha) {
@@ -105,23 +117,24 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     return filas.map(reservaDeFila);
   }
 
-  /* Reservas por noche. Las cuenta la base de datos (007_recuento_reservas.sql); si aún no
-     tiene esa función, se cuentan aquí como antes para que el panel no deje de funcionar */
-  let avisoRecuento = false;
-  async function recuentoReservas() {
-    const { data, error } = await db.rpc("recuento_reservas");
-    if (!error) return data.map((x) => ({ fecha: x.fecha, total: Number(x.total) }));
-    if (!/recuento_reservas/.test(error.message) || !/schema cache|does not exist|Could not find/i.test(error.message)) {
-      throw new Error(`Supabase (recuento de reservados): ${error.message}`);
+  /* Reservas por noche entre dos fechas: con la migración 008, solo ese rango; con la 007, todo el
+     histórico y se filtra aquí; sin ninguna, se cuentan aquí como antes para que el panel siga funcionando */
+  async function recuentoReservas(desde, hasta) {
+    let r = await db.rpc("recuento_reservas", { p_desde: desde, p_hasta: hasta });
+    if (!r.error) return entre(r.data, desde, hasta);
+    if (!faltaFuncion(r.error, "recuento_reservas")) throw new Error(`Supabase (recuento de reservados): ${r.error.message}`);
+    r = await db.rpc("recuento_reservas");
+    if (!r.error) {
+      avisar("Falta la migración 008_recuento_por_fechas.sql en Supabase: el panel cuenta todo el histórico (más lento).");
+      return entre(r.data, desde, hasta);
     }
-    if (!avisoRecuento) {
-      avisoRecuento = true;
-      console.warn("  Falta la migración 007_recuento_reservas.sql en Supabase: las reservas se cuentan en el servidor (más lento).");
-    }
+    if (!faltaFuncion(r.error, "recuento_reservas")) throw new Error(`Supabase (recuento de reservados): ${r.error.message}`);
+    avisar("Faltan las migraciones 007 y 008 en Supabase: las reservas se cuentan en el servidor (más lento).");
     const filas = [];
-    for (let desde = 0; ; desde += PAGINA) {
+    for (let inicio = 0; ; inicio += PAGINA) {
       const pagina = datosDe(
-        await db.from("reservas").select("fecha").order("fecha").range(desde, desde + PAGINA - 1),
+        await db.from("reservas").select("fecha").gte("fecha", desde).lte("fecha", hasta)
+          .order("fecha").range(inicio, inicio + PAGINA - 1),
         "recuento de reservados"
       );
       filas.push(...pagina);
@@ -215,6 +228,12 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
     return filas[0] || null;
   }
 
+  /* Consulta mínima para que Supabase vea actividad: el plan gratuito pausa el proyecto
+     tras 7 días sin ninguna (en temporada baja puede pasar sin visitas) */
+  async function latido() {
+    datosDe(await db.from("migraciones").select("nombre").limit(1), "latido");
+  }
+
   /* Contenido de la web que se edita desde el panel: una fila por sección (eventos, dias, galeria) */
   async function leerContenido() {
     const filas = datosDe(await db.from("web_contenido").select("seccion, valor"), "leer contenido de la web");
@@ -229,7 +248,7 @@ function crearAlmacenSupabase({ url, clave, cliente }) {
 
   return {
     tipo: "supabase", rpps, rppActivo, deNoche, recuentoNoches, anadir, borrar,
-    crearRpp, actualizarRpp, reservasDeNoche, recuentoReservas,
+    crearRpp, actualizarRpp, reservasDeNoche, recuentoReservas, latido,
     crearReserva, decidirReserva, borrarReserva, disponibilidad,
     leerContenido, guardarContenido,
     esperar: () => Promise.resolve()

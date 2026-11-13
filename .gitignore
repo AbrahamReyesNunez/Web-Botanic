@@ -25,3 +25,7 @@ node_modules/
 
 # Revisiones con detalles de seguridad: no se suben mientras haya fallos sin arreglar (el repo es público)
 documentacion/revision-*.md
+
+# Vídeo de lanzamiento: material, fotogramas, renders y vídeos finales (pesan mucho y salen personas reales)
+launch-video/
+Fotos video/

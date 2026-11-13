@@ -4,21 +4,16 @@
    LO NORMAL: crea y edita los eventos (nombre, foto…) desde el panel,
    /admin.html → Eventos y calendario. Lo del panel manda sobre este archivo.
 
-   FORMA RÁPIDA (sin tocar este archivo):
-     Guarda la portada que se sube a Instagram en
-       img/portadas/AAAA-MM-DD.jpg      (ej: img/portadas/2026-10-17.jpg)
-     y aparecerá sola en el día correspondiente del calendario.
-     También valen .jpeg, .png y .webp.
-
-   FORMA COMPLETA (título, artistas, texto, enlace al post):
-     Añade una entrada abajo con la fecha como clave.
+   SIN PANEL (título, artistas, texto, portada, enlace al post):
+     Añade una entrada abajo con la fecha como clave. "portada" es la
+     URL (o la ruta dentro de img/) de la imagen.
    ========================================================= */
 window.BOTANIC_EVENTOS = {
   // "2026-10-17": {
   //   titulo: "Noche Tropical",
   //   artistas: "DJ Invitado · Animación",
   //   descripcion: "Fiesta temática con dress code tropical.",
-  //   portada: "img/portadas/2026-10-17.jpg",
+  //   portada: "https://…/portada.jpg",
   //   instagram: "https://www.instagram.com/p/XXXXXXXX/"
   // },
 };

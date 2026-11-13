@@ -42,7 +42,7 @@ data/reservados.js               Mesas, precios y bebidas de los reservados (con
 data/eventos.js                  Nombre por defecto de cada noche (los eventos se crean en el panel)
 google-apps-script/Codigo.gs     Código del Google Apps Script de la galería (se pega en Apps Script)
 data/db/                         Solo en modo JSON: rpps.json, mesas.json, inscripciones.json, reservas.json y contenido.json (las tres últimas no se suben)
-img/                             Logo y portadas (las fotos de la galería están en Google Drive)
+img/                             Logo y fondos (las portadas y las fotos de la galería están en Google Drive)
 test/                            Pruebas (node --test)
 ```
 
@@ -171,4 +171,3 @@ git push -u origin feature/mi-cambio
 # Para publicar: pull request develop -> main.
 ```
 
-Las portadas y las fotos de la galería pueden subirse directamente a `develop`, sin rama propia.

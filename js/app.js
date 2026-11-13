@@ -12,7 +12,6 @@
 
   const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-  const EXT_PORTADA = ["jpg", "jpeg", "png", "webp"];
   const STORAGE_KEY = "botanic_lista";
 
   const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -78,7 +77,6 @@
     // Foto subida desde el panel (Google Drive), con la URL alternativa por si falla la primera
     if (ev && ev.foto) candidatos.push(driveThumb(ev.foto, "w1200"), driveAlternativa(ev.foto, "w1200"));
     if (ev && ev.portada) candidatos.push(ev.portada);
-    EXT_PORTADA.forEach((ext) => candidatos.push(`img/portadas/${k}.${ext}`));
     const p = (async () => {
       for (const url of candidatos) {
         const ok = await probe(url);

@@ -128,10 +128,13 @@ test("una petición activa por teléfono y noche", async () => {
   try {
     const a = await reservar(s.base);
     assert.equal(a.status, 201);
-    // Mismo teléfono escrito de otra forma
+    // Mismo teléfono escrito de otra forma: no se guarda, pero la respuesta es la de una reserva nueva,
+    // para que nadie pueda averiguar si un número ha reservado (E9)
     const b = await reservar(s.base, { telefono: "+34600123123", nombre: "Pedro Gómez" });
-    assert.equal(b.status, 409);
-    assert.equal(b.j.motivo, "duplicado");
+    assert.equal(b.status, 201);
+    assert.deepEqual(Object.keys(b.j).sort(), Object.keys(a.j).sort());
+    assert.notEqual(b.j.referencia, a.j.referencia);
+    assert.equal((await s.almacen.reservas()).length, 1);
     // Si se rechaza, puede volver a pedir
     const [x] = await s.almacen.reservas();
     assert.deepEqual(await s.almacen.decidirReserva(x.id, "rechazada"), { ok: true });
@@ -193,6 +196,25 @@ test("reserva: token, campo trampa, tamaño y límite por IP", async () => {
     for (const tel of ["611111111", "622222222", "633333333"]) assert.equal((await reservar(s.base, { telefono: tel })).status, 201);
     const r = await reservar(s.base, { telefono: "644444444" });
     assert.equal(r.status, 429);
+  } finally { await s.cerrar(); }
+});
+
+test("límite por IP sin carreras: 6 reservas a la vez no se saltan el de 3 por hora (E7)", async () => {
+  const s = await arrancar();
+  try {
+    const tels = ["611111111", "622222222", "633333333", "644444444", "655555555", "666666666"];
+    const r = await Promise.all(tels.map((telefono) => reservar(s.base, { telefono })));
+    assert.equal(r.filter((x) => x.status === 201).length, 3);
+    assert.equal(r.filter((x) => x.status === 429).length, 3);
+    assert.equal((await s.almacen.reservas()).length, 3);
+  } finally { await s.cerrar(); }
+});
+
+test("una reserva rechazada no gasta el límite por IP", async () => {
+  const s = await arrancar();
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await reservar(s.base, { personas: 99 })).status, 400);
+    assert.equal((await reservar(s.base)).status, 201);
   } finally { await s.cerrar(); }
 });
 

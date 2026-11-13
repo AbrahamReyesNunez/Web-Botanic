@@ -81,7 +81,7 @@ La web envía **peticiones**: entran como `pendiente` y el equipo las confirma o
 - **Confirmar o rechazar:** Supabase → **Table Editor → reservas**, cambia `estado`. Para leerlas cómodas, **vista_reservas**: una fila por reserva con el pedido en texto, el RPP y un enlace de WhatsApp al cliente.
 - **Cambiar el aforo:** edita `mesas` en **tipos_mesa**. La web lo nota en unos 30 s.
 - **Precios:** los calcula el servidor con `public/data/reservados.js`; lo que mande el navegador no cuenta. Cada línea guarda el precio del momento. Al cambiar precios o bebidas, reinicia el servidor (`npm start`) para que los use.
-- **Protección:** las mismas capas que la lista (token, campo trampa, campos conocidos) más: 3 peticiones por hora y 6 al día por IP; una petición activa por teléfono y noche; teléfono en formato internacional; hasta 5 personas por botella; el pedido se comprueba contra el catálogo.
+- **Protección:** las mismas capas que la lista (token, campo trampa, campos conocidos) más: 3 peticiones por hora y 6 al día por IP (sin carreras: se cuentan antes de esperar a la base de datos y una petición rechazada no gasta); una petición activa por teléfono y noche (si el teléfono ya tiene una, se responde como si se hubiera recibido, pero no se guarda: así nadie puede averiguar si un número ha reservado; el equipo ve la primera); teléfono en formato internacional; hasta 5 personas por botella; el pedido se comprueba contra el catálogo.
 
 ## Panel de la web
 

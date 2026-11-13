@@ -120,10 +120,11 @@ test("API de reservas con Supabase: aforo completo, duplicado y alta", async () 
     assert.equal(r.status, 409);
     assert.equal(r.j.motivo, "completo");
 
+    // Teléfono que ya tenía reserva: misma respuesta que una nueva, para no revelarlo (E9)
     respuesta = { data: { ok: false, motivo: "duplicado" }, error: null };
     r = await reservar();
-    assert.equal(r.status, 409);
-    assert.match(r.j.error, /teléfono/);
+    assert.equal(r.status, 201);
+    assert.match(r.j.referencia, /^[0-9A-F]{8}$/);
 
     respuesta = { data: { ok: true, id: "6f1c2b9e-0000-4000-8000-000000000002" }, error: null };
     r = await reservar();

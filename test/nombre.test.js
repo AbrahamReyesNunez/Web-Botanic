@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validar, normalizar, clave } = require("../js/compartido/nombre.js");
+const { validar, normalizar, clave } = require("../public/js/compartido/nombre.js");
 
 test("acepta nombres reales y los normaliza", () => {
   const casos = {

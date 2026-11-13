@@ -143,7 +143,7 @@ test("galería: nombre, portada y anclados; sin ajustes el álbum desaparece", a
 
 test("si falta la tabla en Supabase, el panel recibe un mensaje claro (no 'Error interno')", async () => {
   const { crearContenido } = require("../server/contenido.js");
-  const crearCalendario = require("../js/compartido/calendario.js");
+  const crearCalendario = require("../public/js/compartido/calendario.js");
   const sinTabla = () => Promise.reject(new Error("Supabase (guardar contenido de la web): Could not find the table 'public.web_contenido' in the schema cache"));
   const errorOriginal = console.error;
   console.error = () => {};
@@ -190,7 +190,7 @@ test("estilo de la web: solo los cuatro de la lista, y la web lo recibe en /api/
 
 test("si falta la migración 006, guardar el estilo da un mensaje claro", async () => {
   const { crearContenido } = require("../server/contenido.js");
-  const crearCalendario = require("../js/compartido/calendario.js");
+  const crearCalendario = require("../public/js/compartido/calendario.js");
   const sinAjustes = (seccion) => seccion === "ajustes"
     ? Promise.reject(new Error('Supabase (guardar contenido de la web): new row for relation "web_contenido" violates check constraint "web_contenido_seccion_check"'))
     : Promise.resolve();

@@ -15,7 +15,7 @@ const zlib = require("node:zlib");
 const { pipeline } = require("node:stream");
 const { promisify } = require("node:util");
 
-const crearCalendario = require("../js/compartido/calendario.js");
+const crearCalendario = require("../public/js/compartido/calendario.js");
 const { crearAlmacen } = require("./almacen.js");
 const { crearAlmacenSupabase } = require("./almacen-supabase.js");
 const { crearLista } = require("./lista.js");
@@ -27,6 +27,8 @@ const { crearDrive } = require("./drive.js");
 const { crearGaleria } = require("./galeria.js");
 
 const RAIZ = path.resolve(__dirname, "..");
+/* Lo único que se sirve como archivos: la web. .env, data/db, el código y la documentación quedan fuera */
+const PUBLICA = path.join(RAIZ, "public");
 const MAX_CUERPO = 1024;
 const MAX_CUERPO_RESERVA = 8 * 1024; // pedido de hasta 40 líneas y comentario de 500 caracteres
 const MAX_CUERPO_PANEL = 16 * 1024;  // evento o ajustes de un álbum (hasta 200 fotos ancladas)
@@ -72,8 +74,24 @@ function coincideEtag(req, etag) {
   return pedido.trim() === "*" || pedido.split(",").some((e) => e.trim().replace(/^W\//, "") === etag);
 }
 
-/* Rutas que nunca se sirven como archivos */
-const PRIVADO = /^\/(server|test|node_modules|supabase|documentacion|google-apps-script|data\/db)(\/|$)|^\/(package(-lock)?\.json|README\.md)$|(^|\/)\./;
+/* Archivo de public/ que corresponde a una ruta, o null si la ruta no es válida.
+   Se decide sobre la ruta ya decodificada y resuelta, no sobre lo que escribe el visitante:
+   - nada de \ (Windows la toma como separador: /%5C.env salía de la carpeta), \0 ni : (flujos de NTFS)
+   - ningún segmento vacío (//), oculto (.env, .git, ..) ni que acabe en punto o espacio
+     (Windows los ignora: "a.html." abre "a.html")
+   - el resultado tiene que quedar dentro de public/ */
+function archivoPublico(ruta) {
+  let rel;
+  try { rel = decodeURIComponent(ruta); } catch (e) { return null; }
+  if (rel === "/") rel = "/index.html";
+  if (!rel.startsWith("/") || /[\\\0:]/.test(rel)) return null;
+  const segmentos = rel.slice(1).split("/");
+  if (segmentos.some((s) => !s || s.startsWith(".") || /[. ]$/.test(s))) return null;
+  const archivo = path.resolve(PUBLICA, ...segmentos);
+  const dentro = path.relative(PUBLICA, archivo);
+  if (!dentro || dentro.startsWith("..") || path.isAbsolute(dentro)) return null;
+  return archivo;
+}
 
 const CABECERAS_SEGURIDAD = {
   "Content-Security-Policy": [
@@ -81,7 +99,7 @@ const CABECERAS_SEGURIDAD = {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
-    // Galería: miniaturas de Google Drive y álbumes desde el Google Apps Script (data/config.js)
+    // Galería: miniaturas de Google Drive y álbumes desde el Google Apps Script (public/data/config.js)
     "img-src 'self' data: https://drive.google.com https://lh3.googleusercontent.com",
     "frame-src https://www.google.com",
     "connect-src 'self' https://script.google.com https://script.googleusercontent.com",
@@ -103,10 +121,10 @@ function ahoraMadrid() {
   return new Date(+partes.year, +partes.month - 1, +partes.day, +partes.hour, +partes.minute, +partes.second);
 }
 
-/* data/config.js y data/reservados.js son scripts de navegador: se ejecutan con un window falso */
+/* public/data/config.js y public/data/reservados.js son scripts de navegador: se ejecutan con un window falso */
 function leerDatosWeb(archivo, variable) {
   const ctx = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(RAIZ, "data", archivo), "utf8"), ctx);
+  vm.runInNewContext(fs.readFileSync(path.join(PUBLICA, "data", archivo), "utf8"), ctx);
   return ctx.window[variable];
 }
 const leerConfig = () => leerDatosWeb("config.js", "BOTANIC_CONFIG");
@@ -124,7 +142,7 @@ function cargarEnv() {
 function crearServidor(opciones = {}) {
   const cfg = leerConfig();
   let contenido = null;
-  // Los días cerrados o abiertos desde el panel mandan sobre data/config.js
+  // Los días cerrados o abiertos desde el panel mandan sobre public/data/config.js
   const cal = crearCalendario(cfg, opciones.ahora || ahoraMadrid, () => (contenido ? contenido.dias() : {}));
   const almacen = opciones.supabase
     ? crearAlmacenSupabase(opciones.supabase)
@@ -213,7 +231,7 @@ function crearServidor(opciones = {}) {
   let pagina404 = null;
   function noEncontrado(req, res) {
     if (!pagina404) {
-      pagina404 = fs.promises.readFile(path.join(RAIZ, "404.html"));
+      pagina404 = fs.promises.readFile(path.join(PUBLICA, "404.html"));
       pagina404.catch(() => { pagina404 = null; });   // si falla, se reintenta en el siguiente 404
     }
     pagina404.then((html) => {
@@ -239,13 +257,8 @@ function crearServidor(opciones = {}) {
   }
 
   function servirArchivo(req, res, ruta, url) {
-    let rel;
-    try { rel = decodeURIComponent(ruta); } catch (e) { rel = null; }
-    if (rel === "/") rel = "/index.html";
-    const archivo = rel && path.resolve(RAIZ, "." + path.posix.normalize(rel));
-    if (!rel || rel.includes("\0") || PRIVADO.test(rel) || !archivo.startsWith(RAIZ + path.sep)) {
-      return noEncontrado(req, res);
-    }
+    const archivo = archivoPublico(ruta);
+    if (!archivo) return noEncontrado(req, res);
     fs.stat(archivo, async (err, st) => {
       if (err || !st.isFile()) return noEncontrado(req, res);
       const ext = path.extname(archivo).toLowerCase();
@@ -293,7 +306,7 @@ function crearServidor(opciones = {}) {
 
     // Álbumes de la galería: copia del Google Apps Script que el servidor renueva cada 10 min
     if (m === "GET" && ruta === "/api/galeria") {
-      if (!galeria.configurada) return enviar(res, 503, { ok: false, error: "Falta galeria.scriptUrl en data/config.js." });
+      if (!galeria.configurada) return enviar(res, 503, { ok: false, error: "Falta galeria.scriptUrl en public/data/config.js." });
       let copia;
       try { copia = await galeria.obtener(); } catch (e) {
         return enviar(res, 502, { ok: false, error: "No se ha podido leer la galería de Google Drive." });
@@ -413,9 +426,13 @@ function crearServidor(opciones = {}) {
   return servidor;
 }
 
-module.exports = { crearServidor, cargarEnv };
+module.exports = { crearServidor, cargarEnv, archivoPublico };
 
 if (require.main === module) {
+  // Un error que nadie recoge deja el servidor en un estado desconocido: se registra y se sale,
+  // y el supervisor (pm2, servicio de Windows, systemd…) lo vuelve a arrancar limpio
+  process.on("uncaughtException", (e) => { console.error("Error no controlado:", e); process.exit(1); });
+  process.on("unhandledRejection", (e) => { console.error("Promesa rechazada sin controlar:", e); process.exit(1); });
   cargarEnv();
   let claveAdmin = process.env.ADMIN_KEY;
   if (!claveAdmin) {

@@ -114,7 +114,7 @@ function crearContenido({ almacen, cal, drive }) {
   }
 
   /* Quitar (o cancelar) un evento deja el día cerrado: en la web, la lista y las reservas.
-     Si ese día ya está cerrado según data/config.js, basta con quitar el cambio del panel */
+     Si ese día ya está cerrado según public/data/config.js, basta con quitar el cambio del panel */
   async function borrarEvento(fecha) {
     if (!cal.esClaveValida(fecha)) return error(400, "Fecha no válida.");
     const anterior = datos.eventos[fecha];

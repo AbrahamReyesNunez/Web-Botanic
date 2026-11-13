@@ -4,13 +4,13 @@
    límite por IP → tipo de mesa → fecha → nombre, teléfono, personas,
    RPP y comentarios → pedido (contra el catálogo) → aforo y teléfono
    repetido (en el almacén, en la misma transacción que el alta).
-   El total lo calcula el servidor con data/reservados.js: lo que mande el
+   El total lo calcula el servidor con public/data/reservados.js: lo que mande el
    navegador como precio no se usa.
    ========================================================= */
 "use strict";
 
-const BotanicNombre = require("../js/compartido/nombre.js");
-const Reservas = require("../js/compartido/reservas.js");
+const BotanicNombre = require("../public/js/compartido/nombre.js");
+const Reservas = require("../public/js/compartido/reservas.js");
 const { crearLimitador } = require("./limites.js");
 
 const CAMPOS = new Set(["tipo", "fecha", "nombre", "telefono", "personas", "rpp", "notas", "carrito", "token", "web"]);

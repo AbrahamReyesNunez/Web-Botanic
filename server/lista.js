@@ -5,7 +5,7 @@
    ========================================================= */
 "use strict";
 
-const BotanicNombre = require("../js/compartido/nombre.js");
+const BotanicNombre = require("../public/js/compartido/nombre.js");
 const { crearLimitador } = require("./limites.js");
 
 const CAMPOS = new Set(["fecha", "nombre", "rpp", "token", "web"]);

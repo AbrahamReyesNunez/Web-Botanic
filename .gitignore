@@ -10,3 +10,22 @@ desktop.ini
 
 # Claude Code (local)
 .claude/settings.local.json
+
+# Datos de la lista (temporal, hasta tener base de datos)
+data/db/inscripciones.json
+data/db/reservas.json
+data/db/contenido.json
+data/db/*.tmp
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+node_modules/
+
+# Revisiones con detalles de seguridad: no se suben mientras haya fallos sin arreglar (el repo es público)
+documentacion/revision-*.md
+
+# Vídeo de lanzamiento: material, fotogramas, renders y vídeos finales (pesan mucho y salen personas reales)
+launch-video/
+Fotos video/

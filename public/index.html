@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Botanic Chipiona · Discoteca</title>
+  <meta name="description" content="Discoteca Botanic Chipiona. Abrimos de miércoles a sábado desde las 23:30. Consulta la agenda, apúntate a la lista y reserva tu mesa.">
+  <meta name="theme-color" content="#06120f">
+  <meta property="og:title" content="Botanic Chipiona · Discoteca">
+  <meta property="og:description" content="De miércoles a sábado. Agenda, lista y reservados.">
+  <meta property="og:image" content="img/brand/botanic.jpg">
+  <link rel="icon" href="img/brand/icono-48.png" sizes="48x48" type="image/png">
+  <link rel="apple-touch-icon" href="img/brand/icono-180.png">
+  <!-- Fondo de la portada (lo que tarda más en verse en móvil): se pide ya, antes que el CSS.
+       Mismas condiciones que --hojas-arriba en css/styles.css -->
+  <link rel="preload" as="image" href="img/brand/hojas-arriba-movil.webp" media="(max-aspect-ratio: 3/4)" fetchpriority="high">
+  <link rel="preload" as="image" href="img/brand/hojas-arriba-1600.webp" media="(min-aspect-ratio: 751/1000) and (max-width: 1280px)" fetchpriority="high">
+  <link rel="preload" as="image" href="img/brand/hojas-arriba-2560.webp" media="(min-aspect-ratio: 751/1000) and (min-width: 1281px)" fetchpriority="high">
+  <!-- Eventos, días, galería y estilo de la época editados desde el panel (lo genera el servidor).
+       Va aquí para que arranque.js ponga el estilo antes de pintar la página -->
+  <script src="api/web.js"></script>
+  <script src="js/arranque.js?v=2"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=20">
+  <link rel="stylesheet" href="css/temas.css?v=2">
+</head>
+<body>
+
+  <!-- ============ CABECERA ============ -->
+  <header class="topbar" id="topbar">
+    <a href="#inicio" class="brand" aria-label="Botanic, ir al inicio">B<span class="o-slash">Ø</span>TANIC</a>
+    <nav class="nav" id="nav" aria-label="Principal">
+      <a href="#agenda">Agenda</a>
+      <a href="#galeria">Galería</a>
+      <a href="#reservados">Reservados</a>
+      <a href="#info">Cómo llegar</a>
+      <a href="#agenda" class="btn btn-neon btn-sm" data-ir-proxima><span class="btn-label">Lista</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+    </nav>
+    <button class="burger" id="burger" aria-label="Abrir menú" aria-expanded="false" aria-controls="nav">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+
+  <!-- ============ PORTADA ============ -->
+  <section class="hero" id="inicio">
+    <div class="hero-layer hero-back" data-depth="0.12" aria-hidden="true"></div>
+    <div class="beams" aria-hidden="true">
+      <span class="beam beam-1"></span>
+      <span class="beam beam-2"></span>
+      <span class="beam beam-3"></span>
+    </div>
+    <div class="hero-layer hero-front" data-depth="0.32" aria-hidden="true"></div>
+
+    <div class="hero-content">
+      <p class="eyebrow">Discoteca · Terraza · Chipiona</p>
+      <h1 class="neon-title" id="neon-title" aria-label="Botanic">B<span class="o-slash">Ø</span>TANIC</h1>
+      <p class="hero-sub">De miércoles a sábado desde las 23:30</p>
+
+      <div class="hero-actions">
+        <a href="#agenda" class="btn btn-neon" data-ir-proxima><span class="btn-label">Apúntate a la lista</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+        <a href="#reservados" class="btn btn-ghost"><span class="btn-label">Reservar mesa</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+      </div>
+    </div>
+    <a href="#semana" class="scroll-hint" aria-label="Bajar">
+      <span></span>
+    </a>
+  </section>
+
+  <!-- ============ CINTA ============ -->
+  <div class="marquee-wrap" aria-hidden="true">
+    <div class="marquee marquee-solid" data-marquee="Miércoles ✦ Jueves ✦ Viernes ✦ Sábado ✦ Botanic Chipiona ✦"></div>
+    <div class="marquee marquee-outline" data-marquee="Lista ✦ Reservados ✦ Terraza ✦ Hasta las 7:00 ✦" data-reverse></div>
+  </div>
+
+  <!-- ============ ESTA SEMANA ============ -->
+  <section class="section" id="semana">
+    <div class="container">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow">Próximas noches</p>
+        <h2 class="section-title">Esta semana en <span class="outline">Botanic</span></h2>
+      </header>
+      <div class="week-strip" id="week-strip"></div>
+    </div>
+  </section>
+
+  <!-- ============ AGENDA / CALENDARIO ============ -->
+  <section class="section section-alt" id="agenda">
+    <div class="container">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow">Agenda</p>
+        <h2 class="section-title">Elige tu <span class="outline">noche</span></h2>
+        <p class="section-lead">Pulsa en una noche para ver la portada y apuntarte a la lista.</p>
+      </header>
+
+      <div class="calendar" id="calendar" data-reveal="scale">
+        <div class="cal-toolbar">
+          <button class="cal-nav" id="cal-prev" aria-label="Mes anterior">&#8592;</button>
+          <h3 class="cal-month" id="cal-month" aria-live="polite"></h3>
+          <button class="cal-nav" id="cal-next" aria-label="Mes siguiente">&#8594;</button>
+        </div>
+        <div class="cal-weekdays" aria-hidden="true">
+          <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
+        </div>
+        <div class="cal-grid" id="cal-grid" role="grid"></div>
+        <div class="cal-legend">
+          <span><i class="dot dot-open"></i> Abierto</span>
+          <span><i class="dot dot-today"></i> Hoy</span>
+          <span><i class="dot dot-closed"></i> Cerrado</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GALERÍA ============ -->
+  <section class="section" id="galeria">
+    <div class="container">
+      <header class="section-head" data-reveal>
+        <p class="eyebrow">Galería</p>
+        <h2 class="section-title">Así se vive <span class="outline">Botanic</span></h2>
+        <p class="section-lead">Las fotos de cada noche. Entra en un álbum, búscate y descárgate las tuyas.</p>
+      </header>
+      <!-- Mientras responde el script de Google Drive (tarda unos segundos) -->
+      <div class="gal-estado" id="gal-cargando" role="status">
+        <span class="gal-spinner" aria-hidden="true"></span>
+        <p>Cargando álbumes…</p>
+        <p class="gal-estado-nota">Puede tardar unos segundos.</p>
+      </div>
+      <div class="gal-estado gal-error" id="gal-error" role="alert" hidden>
+        <p class="gal-estado-titulo">No hemos podido cargar las fotos</p>
+        <p class="gal-estado-nota" id="gal-error-detalle"></p>
+        <button class="btn btn-ghost" id="gal-reintentar" type="button"><span class="btn-label">Reintentar</span><span class="btn-arrow" aria-hidden="true">↻</span></button>
+      </div>
+      <!-- Álbumes (tarjetas) o fotos del álbum abierto (#album=Nombre) -->
+      <div id="gal-vista"></div>
+      <div class="gal-empty" id="gal-empty" hidden>
+        <p>Muy pronto las fotos de nuestras noches.</p>
+        <a class="btn btn-ghost" id="gal-ig" target="_blank" rel="noopener"><span class="btn-label">Síguenos en Instagram</span><span class="btn-arrow" aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RESERVADOS ============ -->
+  <section class="section section-vip" id="reservados">
+    <div class="vip-bg" data-depth="0.15" aria-hidden="true"></div>
+    <div class="container res-grid">
+      <div class="res-intro" data-reveal="left">
+        <p class="eyebrow">Reservados</p>
+        <h2 class="section-title">Reserva tu <span class="outline">mesa</span></h2>
+        <p class="section-lead">Cumpleaños, despedidas o simplemente tu noche. Elige dónde quieres vivirla.</p>
+        <div class="res-opciones">
+          <button class="res-opcion" type="button" data-tipo="pista" aria-expanded="false" aria-controls="res-panel">
+            <span class="res-opcion-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+            </span>
+            <span class="res-opcion-txt">
+              <span class="res-opcion-titulo">Mesa en pista</span>
+              <span class="res-opcion-sub">En mitad de la fiesta</span>
+            </span>
+            <span class="res-opcion-flecha" aria-hidden="true">→</span>
+          </button>
+          <button class="res-opcion" type="button" data-tipo="vip" aria-expanded="false" aria-controls="res-panel">
+            <span class="res-opcion-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 11V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v3"/><path d="M3 13a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3z"/><path d="M6 18v2M18 18v2"/></svg>
+            </span>
+            <span class="res-opcion-txt">
+              <span class="res-opcion-titulo">Mesa VIP</span>
+              <span class="res-opcion-sub">Sillones y zona privada</span>
+            </span>
+            <span class="res-opcion-flecha" aria-hidden="true">→</span>
+          </button>
+        </div>
+        <p class="res-dudas">¿Dudas? <a id="vip-wa" target="_blank" rel="noopener">Escríbenos por WhatsApp</a> o <a id="vip-tel"><span id="vip-tel-label">llámanos</span></a></p>
+      </div>
+
+      <div class="res-panel" id="res-panel" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ============ INFO / UBICACIÓN ============ -->
+  <section class="section" id="info">
+    <div class="container info-grid">
+      <div data-reveal>
+        <p class="eyebrow">Cómo llegar</p>
+        <h2 class="section-title">Te <span class="outline">esperamos</span></h2>
+        <p class="info-address" id="info-address"></p>
+        <h3 class="info-sub">Horario</h3>
+        <table class="hours" id="hours"></table>
+        <p class="info-note">Entrada solo para mayores de 18 años. Imprescindible DNI. Reservado el derecho de admisión.</p>
+        <a class="btn btn-ghost" id="maps-link" target="_blank" rel="noopener"><span class="btn-label">Abrir en Google Maps</span><span class="btn-arrow" aria-hidden="true">↗</span></a>
+      </div>
+      <div class="map-wrap" data-reveal="scale" style="--d: 2">
+        <iframe id="map" title="Mapa de Botanic Chipiona" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CINTA FINAL ============ -->
+  <div class="marquee-wrap marquee-wrap-end" aria-hidden="true">
+    <div class="marquee marquee-solid" data-marquee="Nos vemos en la pista ✦ Botanic Chipiona ✦"></div>
+  </div>
+
+  <!-- ============ PIE ============ -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <a href="#inicio" class="brand brand-lg">B<span class="o-slash">Ø</span>TANIC</a>
+      <div class="socials">
+        <a id="ft-ig" target="_blank" rel="noopener" aria-label="Instagram">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2c3.2 0 3.6 0 4.8.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.6.1 4.8s0 3.6-.1 4.8c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.6.1-4.8.1s-3.6 0-4.8-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.8c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2zm0 1.8c-3.1 0-3.5 0-4.7.1-1.1.1-1.7.2-2.1.4-.5.2-.9.4-1.3.8-.4.4-.6.8-.8 1.3-.2.4-.3 1-.4 2.1C2.6 9.9 2.6 10.3 2.6 12s0 2.1.1 3.3c.1 1.1.2 1.7.4 2.1.2.5.4.9.8 1.3.4.4.8.6 1.3.8.4.2 1 .3 2.1.4 1.2.1 1.6.1 4.7.1s3.5 0 4.7-.1c1.1-.1 1.7-.2 2.1-.4.5-.2.9-.4 1.3-.8.4-.4.6-.8.8-1.3.2-.4.3-1 .4-2.1.1-1.2.1-1.6.1-3.3s0-2.1-.1-3.3c-.1-1.1-.2-1.7-.4-2.1-.2-.5-.4-.9-.8-1.3-.4-.4-.8-.6-1.3-.8-.4-.2-1-.3-2.1-.4C15.5 4 15.1 4 12 4zm0 3.1a4.9 4.9 0 1 1 0 9.8 4.9 4.9 0 0 1 0-9.8zm0 8.1a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zm5.1-8.3a1.1 1.1 0 1 1 0-2.3 1.1 1.1 0 0 1 0 2.3z"/></svg>
+        </a>
+        <a id="ft-fb" target="_blank" rel="noopener" aria-label="Facebook">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 22v-8.2h2.8l.4-3.2h-3.2V8.5c0-.9.3-1.6 1.6-1.6h1.7V4.1c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v2.4H7.3v3.2h2.8V22h3.4z"/></svg>
+        </a>
+        <a id="ft-wa" target="_blank" rel="noopener" aria-label="WhatsApp">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.2-.1-1-.4-2-1.2-.7-.6-1.2-1.4-1.4-1.6-.1-.2 0-.4.1-.5l.4-.4.2-.4v-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.7.3-.2.2-.9.9-.9 2.2s.9 2.6 1 2.7c.1.2 1.8 2.8 4.4 3.9.6.3 1.1.4 1.5.5.6.2 1.2.2 1.6.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>
+        </a>
+      </div>
+      <p class="footer-small" id="ft-address"></p>
+      <p class="footer-small">© <span id="ft-year"></span> Discoteca Botanic Chipiona · +18 · Consume con responsabilidad</p>
+    </div>
+  </footer>
+
+  <!-- ============ VISOR DE FOTOS ============ -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Visor de fotos" hidden>
+    <button class="lb-close" id="lb-close" aria-label="Cerrar">&times;</button>
+    <a class="lb-download" id="lb-download" href="#" rel="noopener" aria-label="Descargar foto" title="Descargar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></a>
+    <button class="lb-nav lb-prev" id="lb-prev" aria-label="Foto anterior">&#8249;</button>
+    <figure class="lb-figure">
+      <span class="gal-spinner lb-spinner" aria-hidden="true"></span>
+      <img id="lb-img" alt="" referrerpolicy="no-referrer">
+      <figcaption id="lb-caption"></figcaption>
+    </figure>
+    <button class="lb-nav lb-next" id="lb-next" aria-label="Foto siguiente">&#8250;</button>
+  </div>
+
+  <!-- ============ FORMULARIO DE RESERVA ============ -->
+  <div class="res-modal" id="res-modal" role="dialog" aria-modal="true" aria-labelledby="res-modal-titulo" hidden>
+    <div class="res-modal-caja" id="res-modal-caja">
+      <button class="dp-close" id="res-modal-close" type="button" aria-label="Cerrar">&times;</button>
+      <div id="res-modal-cuerpo"></div>
+    </div>
+  </div>
+
+  <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
+
+  <script src="data/config.js"></script>
+  <script src="data/eventos.js"></script>
+  <script src="data/reservados.js"></script>
+  <script src="js/compartido/dom.js"></script>
+  <script src="js/compartido/calendario.js"></script>
+  <script src="js/compartido/nombre.js"></script>
+  <script src="js/compartido/reservas.js"></script>
+  <script src="js/app.js?v=20"></script>
+  <script src="js/temas.js?v=2"></script>
+</body>
+</html>

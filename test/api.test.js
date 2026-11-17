@@ -1,0 +1,405 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { crearServidor } = require("../server/server.js");
+
+// Miércoles 14/10/2026 a las 12:00: hay lista para esa noche
+const AHORA = () => new Date(2026, 9, 14, 12, 0, 0);
+const NOCHE = "2026-10-14";
+const RPPS = [
+  { codigo: "aaaa1111", nombre: "Prueba 1", activo: true },
+  { codigo: "bbbb2222", nombre: "Prueba 2", activo: true },
+  { codigo: "cccc3333", nombre: "Inactivo", activo: false }
+];
+
+async function arrancar(opciones = {}) {
+  const datos = fs.mkdtempSync(path.join(os.tmpdir(), "botanic-"));
+  fs.writeFileSync(path.join(datos, "rpps.json"), JSON.stringify(RPPS));
+  const servidor = crearServidor({ datos, claveAdmin: "clave-de-prueba", ahora: AHORA, tokens: { minMs: 0 }, ...opciones });
+  await new Promise((r) => servidor.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${servidor.address().port}`;
+  return {
+    base,
+    datos,
+    servidor,
+    cerrar: async () => {
+      await servidor.almacen.esperar();
+      servidor.closeAllConnections();
+      await new Promise((r) => servidor.close(r));
+      fs.rmSync(datos, { recursive: true, force: true });
+    }
+  };
+}
+
+const token = async (base) => (await (await fetch(`${base}/api/form-token`)).json()).token;
+
+async function inscribir(base, cuerpo, { conToken = true } = {}) {
+  const body = { fecha: NOCHE, ...cuerpo };
+  if (conToken && !("token" in cuerpo)) body.token = await token(base);
+  const r = await fetch(`${base}/api/lista`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return { status: r.status, j: await r.json() };
+}
+
+const guardadas = (s) => {
+  const f = path.join(s.datos, "inscripciones.json");
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : [];
+};
+const reservasGuardadas = (s) => {
+  const f = path.join(s.datos, "reservas.json");
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8")) : [];
+};
+
+test("inscripción sin RPP y con RPP del link", async () => {
+  const s = await arrancar();
+  try {
+    let r = await inscribir(s.base, { nombre: "  maría   lópez " });
+    assert.equal(r.status, 201);
+    assert.equal(r.j.nombre, "María López");
+    assert.equal(r.j.rpp, null);
+
+    r = await inscribir(s.base, { nombre: "Pedro Gómez", rpp: "aaaa1111" });
+    assert.equal(r.status, 201);
+    assert.equal(r.j.rpp, "Prueba 1");
+
+    await s.servidor.almacen.esperar();
+    const g = guardadas(s);
+    assert.equal(g.length, 2);
+    assert.deepEqual(g.map((x) => x.rpp), [null, "aaaa1111"]);
+  } finally { await s.cerrar(); }
+});
+
+test("RPP: link público válido, inválido e inactivo", async () => {
+  const s = await arrancar();
+  try {
+    assert.equal((await fetch(`${s.base}/api/rpp/aaaa1111`)).status, 200);
+    assert.equal((await fetch(`${s.base}/api/rpp/cccc3333`)).status, 404);
+    assert.equal((await inscribir(s.base, { nombre: "Pedro Gómez", rpp: "zzzz9999" })).status, 400);
+    assert.equal((await inscribir(s.base, { nombre: "Pedro Gómez", rpp: "cccc3333" })).status, 400);
+    assert.equal((await inscribir(s.base, { nombre: "Pedro Gómez", rpp: "<script>" })).status, 400);
+  } finally { await s.cerrar(); }
+});
+
+test("duplicados en la misma noche: no se guardan, pero la respuesta es la misma que la de un alta nueva (E8)", async () => {
+  const s = await arrancar();
+  try {
+    const nueva = await inscribir(s.base, { nombre: "José Pérez" });
+    const repetida = await inscribir(s.base, { nombre: "JOSE perez" });
+    assert.equal(nueva.status, 201);
+    assert.equal(repetida.status, 201);
+    assert.deepEqual(Object.keys(repetida.j).sort(), Object.keys(nueva.j).sort());
+    await s.servidor.almacen.esperar();
+    assert.equal(guardadas(s).length, 1);
+  } finally { await s.cerrar(); }
+});
+
+test("la lista de una noche se abre 7 días antes (E5)", async () => {
+  const s = await arrancar();
+  try {
+    // AHORA es el 14/10/2026 (miércoles): el 21 (miércoles, 7 días) ya tiene lista; el 22 (jueves, 8 días) todavía no
+    assert.equal((await inscribir(s.base, { fecha: "2026-10-21", nombre: "Ana Ruiz" })).status, 201);
+    const lejos = await inscribir(s.base, { fecha: "2026-10-22", nombre: "Ana Ruiz" });
+    assert.equal(lejos.status, 400);
+    assert.match(lejos.j.error, /aún no está abierta/);
+  } finally { await s.cerrar(); }
+});
+
+test("como mucho 5 altas por IP y noche, y sin carreras: 20 a la vez no se saltan los límites (E5, E6)", async () => {
+  const s = await arrancar();
+  try {
+    const nombres = ["Ana Ruiz", "Luis Mora", "Eva Sanz", "Ines Vega", "Pablo Gil", "Marta Diaz", "Juan Leon", "Rosa Mena",
+      "Hugo Pardo", "Lola Cano", "Raul Soto", "Nuria Gallo", "Ivan Rey", "Sara Ortiz", "Dani Prieto", "Carla Pena",
+      "Mario Vidal", "Alba Ramos", "Sergio Luna", "Elena Ruiz"];
+    const r = await Promise.all(nombres.map((nombre) => inscribir(s.base, { nombre })));
+    assert.equal(r.filter((x) => x.status === 201).length, 5);
+    assert.ok(r.filter((x) => x.status === 429).length >= 15);
+    await s.servidor.almacen.esperar();
+    assert.equal(guardadas(s).length, 5);
+    // Cada alta guarda la huella del origen, no la IP
+    assert.ok(guardadas(s).every((x) => typeof x.origen === "string" && x.origen.length >= 20 && !x.origen.includes("127.0.0.1")));
+  } finally { await s.cerrar(); }
+});
+
+test("campo trampa: responde bien pero no guarda", async () => {
+  const s = await arrancar();
+  try {
+    const r = await inscribir(s.base, { nombre: "Bot Malvado", web: "http://spam" });
+    assert.equal(r.status, 201);
+    await s.servidor.almacen.esperar();
+    assert.equal(guardadas(s).length, 0);
+  } finally { await s.cerrar(); }
+});
+
+test("token: falso, ausente o demasiado rápido", async () => {
+  const s = await arrancar();
+  try {
+    assert.equal((await inscribir(s.base, { nombre: "Ana Ruiz", token: "123.abc" })).status, 400);
+    assert.equal((await inscribir(s.base, { nombre: "Ana Ruiz" }, { conToken: false })).status, 400);
+  } finally { await s.cerrar(); }
+
+  const lento = await arrancar({ tokens: {} }); // mínimo real de 3 s
+  try {
+    assert.equal((await inscribir(lento.base, { nombre: "Ana Ruiz" })).status, 400);
+  } finally { await lento.cerrar(); }
+});
+
+test("peticiones malformadas o enormes", async () => {
+  const s = await arrancar();
+  try {
+    const post = (body, tipo = "application/json") => fetch(`${s.base}/api/lista`, { method: "POST", headers: { "Content-Type": tipo }, body });
+    assert.equal((await post("x".repeat(10_000))).status, 413);
+    assert.equal((await post("{no es json")).status, 400);
+    assert.equal((await post("nombre=Juan", "application/x-www-form-urlencoded")).status, 415);
+    assert.equal((await inscribir(s.base, { nombre: "Ana Ruiz", telefono: "600000000" })).status, 400);
+    assert.equal((await inscribir(s.base, { nombre: "a".repeat(500) })).status, 400);
+    assert.equal((await inscribir(s.base, { nombre: "asdfgh qwerty" })).status, 400);
+  } finally { await s.cerrar(); }
+});
+
+test("fechas: noche cerrada, pasada, inexistente o muy lejana", async () => {
+  const s = await arrancar();
+  try {
+    for (const fecha of ["2026-10-13", "2026-10-10", "2026-02-30", "2027-12-01", "hoy"]) {
+      assert.equal((await inscribir(s.base, { nombre: "Ana Ruiz", fecha })).status, 400, fecha);
+    }
+  } finally { await s.cerrar(); }
+});
+
+test("límite de altas por IP", async () => {
+  const s = await arrancar();
+  try {
+    const nombres = ["Ana Ruiz", "Luis Mora", "Eva Sanz", "Raúl Díaz", "Inés Vega"];
+    for (const nombre of nombres) assert.equal((await inscribir(s.base, { nombre })).status, 201, nombre);
+    const r = await inscribir(s.base, { nombre: "Otro Nombre" });
+    assert.equal(r.status, 429);
+  } finally { await s.cerrar(); }
+});
+
+test("panel admin: acceso, recuento y borrado", async () => {
+  const s = await arrancar();
+  try {
+    await inscribir(s.base, { nombre: "Ana Ruiz", rpp: "aaaa1111" });
+    await inscribir(s.base, { nombre: "Luis Mora", rpp: "aaaa1111" });
+    await inscribir(s.base, { nombre: "Eva Sanz" });
+
+    assert.equal((await fetch(`${s.base}/api/admin/resumen?fecha=${NOCHE}`)).status, 401);
+    const login = (clave) => fetch(`${s.base}/api/admin/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave }) });
+    assert.equal((await login("mala")).status, 401);
+    const ok = await login("clave-de-prueba");
+    assert.equal(ok.status, 200);
+    const cookie = ok.headers.get("set-cookie").split(";")[0];
+    assert.match(ok.headers.get("set-cookie"), /HttpOnly/);
+    const h = { headers: { Cookie: cookie } };
+
+    const res = await (await fetch(`${s.base}/api/admin/resumen?fecha=${NOCHE}`, h)).json();
+    assert.equal(res.total, 3);
+    const porNombre = Object.fromEntries(res.porRpp.map((g) => [g.nombre, g.total]));
+    assert.deepEqual(porNombre, { "Prueba 1": 2, "Prueba 2": 0, "Inactivo": 0, "Sin RPP": 1 });
+    assert.equal(res.inscripciones[0].rppCodigo, "aaaa1111");
+
+    const id = res.inscripciones[0].id;
+    assert.equal((await fetch(`${s.base}/api/admin/inscripcion/${id}`, { method: "DELETE", ...h })).status, 200);
+    const res2 = await (await fetch(`${s.base}/api/admin/resumen?fecha=${NOCHE}`, h)).json();
+    assert.equal(res2.total, 2);
+  } finally { await s.cerrar(); }
+});
+
+test("panel admin: crea, edita, desactiva y reactiva RPPs con enlaces estables", async () => {
+  const s = await arrancar();
+  try {
+    const login = await fetch(`${s.base}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave: "clave-de-prueba" })
+    });
+    const h = { headers: { Cookie: login.headers.get("set-cookie").split(";")[0] } };
+    const enviar = (url, method, body) => fetch(`${s.base}${url}`, {
+      method,
+      ...h,
+      headers: { ...h.headers, ...(body ? { "Content-Type": "application/json" } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+
+    assert.equal((await enviar("/api/admin/rpps", "POST", { nombre: "   " })).status, 400);
+    const alta = await enviar("/api/admin/rpps", "POST", { nombre: "RPP nuevo" });
+    assert.equal(alta.status, 201);
+    const { rpp } = await alta.json();
+    assert.match(rpp.codigo, /^[a-f0-9]{8}$/);   // mismo formato que nuevo_codigo_rpp() en Supabase
+    assert.equal(rpp.nombre, "RPP nuevo");
+    assert.equal((await fetch(`${s.base}/api/rpp/${rpp.codigo}`)).status, 200);
+
+    const edicion = await enviar(`/api/admin/rpp/${rpp.codigo}`, "PATCH", { nombre: "RPP editado" });
+    assert.equal(edicion.status, 200);
+    assert.equal((await edicion.json()).rpp.nombre, "RPP editado");
+    assert.equal((await enviar(`/api/admin/rpp/${rpp.codigo}`, "DELETE")).status, 200);
+    assert.equal((await fetch(`${s.base}/api/rpp/${rpp.codigo}`)).status, 404);
+    const listado = await (await enviar("/api/admin/rpps", "GET")).json();
+    assert.deepEqual(listado.rpps.find((x) => x.codigo === rpp.codigo), {
+      codigo: rpp.codigo,
+      nombre: "RPP editado",
+      activo: false
+    });
+
+    assert.equal((await enviar(`/api/admin/rpp/${rpp.codigo}`, "PATCH", { activo: true })).status, 200);
+    assert.equal((await fetch(`${s.base}/api/rpp/${rpp.codigo}`)).status, 200);
+
+    // Nombre ya usado por otro RPP (sin distinguir mayúsculas): 409 con un mensaje claro, al crear y al renombrar
+    const repetido = await enviar("/api/admin/rpps", "POST", { nombre: "rpp EDITADO" });
+    assert.equal(repetido.status, 409);
+    assert.equal((await repetido.json()).error, "Ya hay un RPP con ese nombre.");
+    const { rpp: otro } = await (await enviar("/api/admin/rpps", "POST", { nombre: "Otro RPP" })).json();
+    assert.equal((await enviar(`/api/admin/rpp/${otro.codigo}`, "PATCH", { nombre: "RPP Editado" })).status, 409);
+  } finally { await s.cerrar(); }
+});
+
+test("reservas: guarda pista y VIP y el panel cuenta mesas y exporta bebidas", async () => {
+  const s = await arrancar();
+  try {
+    const crear = async (datos) => fetch(`${s.base}/api/reservas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...datos, token: await token(s.base) })
+    });
+    const base = {
+      fecha: NOCHE,
+      nombre: "Ana Ruiz",
+      telefono: "671 434 657",
+      personas: 4,
+      rpp: "aaaa1111",
+      notas: ""
+    };
+    const pista = await crear({ ...base, tipo: "pista", carrito: [
+      { grupo: "botellas", nombre: "Ron Barceló", cantidad: 1 },
+      { grupo: "refrescos", nombre: "Coca-Cola", cantidad: 10 }
+    ] });
+    assert.equal(pista.status, 201);
+    // Un teléfono por noche: la segunda reserva va con otro
+    const vip = await crear({ ...base, nombre: "Luis Mora", telefono: "600 111 222", tipo: "vip", carrito: [
+      { grupo: "botellas", nombre: "Ron Brugal", cantidad: 2 },
+      { grupo: "refrescos", nombre: "Sprite", cantidad: 20 }
+    ] });
+    assert.equal(vip.status, 201);
+
+    await s.servidor.almacen.esperar();
+    assert.equal(reservasGuardadas(s).length, 2);
+    assert.equal(reservasGuardadas(s)[0].total, 50);
+    assert.equal(reservasGuardadas(s)[0].estado, "pendiente");
+    // Teléfono en formato internacional, como lo exige la base de datos
+    assert.equal(reservasGuardadas(s)[0].telefono, "+34671434657");
+    assert.equal((await crear({ ...base, telefono: "12345", tipo: "pista", carrito: [{ grupo: "botellas", nombre: "Ron Barceló", cantidad: 1 }, { grupo: "refrescos", nombre: "Coca-Cola", cantidad: 10 }] })).status, 400);
+    assert.equal((await crear({ ...base, telefono: "600 333 444", tipo: "pista", carrito: [{ grupo: "botellas", nombre: "Inventada", cantidad: 1 }] })).status, 400);
+    assert.equal((await fetch(`${s.base}/api/admin/reservas?fecha=${NOCHE}`)).status, 401);
+
+    const login = await fetch(`${s.base}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave: "clave-de-prueba" })
+    });
+    const h = { headers: { Cookie: login.headers.get("set-cookie").split(";")[0] } };
+    const r = await (await fetch(`${s.base}/api/admin/reservas?fecha=${NOCHE}`, h)).json();
+    assert.equal(r.total, 2);
+    assert.equal(r.vip, 1);
+    assert.equal(r.pista, 1);
+    assert.deepEqual(r.reservas.map((x) => x.tipo), ["pista", "vip"]);
+    // Cada bebida con su precio por unidad de esa noche (los refrescos van incluidos: 0 €)
+    assert.deepEqual(r.reservas[0].botellas, [{ nombre: "Ron Barceló", cantidad: 1, precio: 50 }]);
+    assert.deepEqual(r.reservas[0].refrescos, [{ nombre: "Coca-Cola", cantidad: 10, precio: 0 }]);
+    assert.equal(r.reservas[0].estado, "pendiente");
+    assert.equal("telefono" in r.reservas[0], false);
+
+    const noches = await (await fetch(`${s.base}/api/admin/noches`, h)).json();
+    assert.ok(noches.noches.some((n) => n.fecha === NOCHE));
+  } finally { await s.cerrar(); }
+});
+
+test("login admin limitado a 5 intentos", async () => {
+  const s = await arrancar();
+  try {
+    const login = () => fetch(`${s.base}/api/admin/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: "mala" }) });
+    for (let i = 0; i < 5; i++) assert.equal((await login()).status, 401);
+    assert.equal((await login()).status, 429);
+  } finally { await s.cerrar(); }
+});
+
+test("archivos privados y rutas con ../ no se sirven", async () => {
+  const s = await arrancar();
+  try {
+    for (const ruta of ["/server/server.js", "/data/db/rpps.json", "/.env", "/.gitignore", "/package.json", "/test/api.test.js", "/supabase/migrations/001_inicial.sql", "/supabase/migrations/005_web_contenido.sql", "/google-apps-script/Codigo.gs", "/documentacion/PI_DAM2_BotanicSuite_Entrega2.pdf", "/documentacion/", "/node_modules/@supabase/supabase-js/package.json","/..%2f..%2fWindows/win.ini", "/%2e%2e/%2e%2e/etc/passwd"]) {
+      assert.equal((await fetch(s.base + ruta)).status, 404, ruta);
+    }
+    const index = await fetch(`${s.base}/`);
+    assert.equal(index.status, 200);
+    assert.match(index.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+    assert.equal((await fetch(`${s.base}/js/compartido/nombre.js`)).status, 200);
+    assert.equal((await fetch(`${s.base}/admin-lista.html`)).status, 404, "el panel antiguo está retirado");
+    const perdida = await fetch(`${s.base}/no/existe`);
+    assert.equal(perdida.status, 404);
+    assert.match(perdida.headers.get("content-type"), /text\/html/);
+    assert.match(await perdida.text(), /Te has perdido/);
+    assert.match((await fetch(`${s.base}/api/no-existe`)).headers.get("content-type"), /application\/json/);
+  } finally { await s.cerrar(); }
+});
+
+test("un cuerpo JSON que no es un objeto (null, lista, número) recibe 400 y no deja la petición colgada (E10)", async () => {
+  const s = await arrancar();
+  try {
+    for (const cuerpo of ["null", "[]", "42", "\"texto\"", "true"]) {
+      for (const ruta of ["/api/lista", "/api/reservas", "/api/admin/login"]) {
+        const r = await fetch(`${s.base}${ruta}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo, signal: AbortSignal.timeout(3000) });
+        assert.equal(r.status, 400, `${ruta} ${cuerpo}`);
+      }
+    }
+  } finally { await s.cerrar(); }
+});
+
+const login = (base, clave, cabeceras = {}) => fetch(`${base}/api/admin/login`, {
+  method: "POST", headers: { "Content-Type": "application/json", ...cabeceras }, body: JSON.stringify({ clave })
+});
+
+test("login del panel: solo cuentan los fallos y, con clave larga, la correcta entra aunque la IP esté bloqueada (P2)", async () => {
+  const fuerte = "una-clave-larga-de-prueba-123";
+  const s = await arrancar({ claveAdmin: fuerte });
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await login(s.base, fuerte)).status, 200, "entrar bien no gasta intentos");
+    for (let i = 0; i < 5; i++) assert.equal((await login(s.base, "mala")).status, 401);
+    assert.equal((await login(s.base, "mala")).status, 429);
+    assert.equal((await login(s.base, fuerte)).status, 200, "un atacante en la misma IP no deja fuera al equipo");
+  } finally { await s.cerrar(); }
+  // Con clave corta, el bloqueo vale también para la correcta (si no, se podría adivinar a base de intentos)
+  const d = await arrancar({ claveAdmin: "corta" });
+  try {
+    for (let i = 0; i < 5; i++) await login(d.base, "mala");
+    assert.equal((await login(d.base, "corta")).status, 429);
+  } finally { await d.cerrar(); }
+});
+
+test("sin clave del panel no arranca (antes valía la palabra \"undefined\")", () => {
+  assert.throws(() => crearServidor({ datos: fs.mkdtempSync(path.join(os.tmpdir(), "botanic-")) }), /ADMIN_KEY/);
+});
+
+test("detrás del proxy: cookie del panel con Secure y HSTS si se entra por https (P4)", async () => {
+  const s = await arrancar({ trustProxy: "local" });
+  try {
+    const r = await login(s.base, "clave-de-prueba", { "X-Forwarded-Proto": "https", "X-Forwarded-For": "203.0.113.9" });
+    assert.match(r.headers.get("set-cookie"), /; Secure/);
+    assert.equal(r.headers.get("strict-transport-security"), "max-age=31536000");
+  } finally { await s.cerrar(); }
+  // En local, sin proxy, ni Secure (no funcionaría por http) ni HSTS
+  const local = await arrancar();
+  try {
+    const r = await login(local.base, "clave-de-prueba");
+    assert.doesNotMatch(r.headers.get("set-cookie"), /Secure/);
+    assert.equal(r.headers.get("strict-transport-security"), null);
+  } finally { await local.cerrar(); }
+});
+
+test("límites por IP: las IPv6 se agrupan por /64 (P5)", () => {
+  const { claveIp } = require("../server/server.js");
+  assert.equal(claveIp("2001:db8:85a3:8d3:1319:8a2e:370:7348"), claveIp("2001:db8:85a3:8d3::1"));
+  assert.notEqual(claveIp("2001:db8:85a3:8d3::1"), claveIp("2001:db8:85a3:8d4::1"));
+  assert.equal(claveIp("::ffff:203.0.113.9"), "203.0.113.9");
+  assert.equal(claveIp("203.0.113.9"), "203.0.113.9");
+});

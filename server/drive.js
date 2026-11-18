@@ -6,7 +6,10 @@
    ========================================================= */
 "use strict";
 
-function crearDrive({ url, clave, fetch = globalThis.fetch }) {
+/* Subir una foto de 6 MB (8 MB en base64) a Apps Script puede tardar; más de esto es que Google no responde */
+const TIEMPO_MAX_MS = 60_000;
+
+function crearDrive({ url, clave, fetch = globalThis.fetch, tiempoMaximoMs = TIEMPO_MAX_MS }) {
   const configurado = !!(url && clave);
 
   async function llamar(cuerpo) {
@@ -15,8 +18,23 @@ function crearDrive({ url, clave, fetch = globalThis.fetch }) {
       e.status = 503;
       throw e;
     }
-    // Apps Script responde con una redirección a script.googleusercontent.com, que fetch sigue sola
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ clave, ...cuerpo }) });
+    // Apps Script responde con una redirección a script.googleusercontent.com, que fetch sigue sola.
+    // La señal corta también la lectura de la respuesta: nada se queda esperando a Google sin límite
+    let r;
+    try {
+      r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ clave, ...cuerpo }),
+        signal: AbortSignal.timeout(tiempoMaximoMs)
+      });
+    } catch (causa) {
+      // Sin red o sin respuesta a tiempo: mensaje claro para el panel, sin detalles internos de la conexión
+      const tiempo = causa && causa.name === "TimeoutError";
+      const e = new Error(tiempo ? "Google Drive no ha respondido a tiempo. Inténtalo de nuevo." : "No se ha podido conectar con Google Drive.");
+      e.status = tiempo ? 504 : 502;
+      throw e;
+    }
     let j;
     try { j = await r.json(); } catch (e) { j = null; }
     if (!r.ok || !j || !j.ok) {

@@ -34,6 +34,11 @@ const MAX_CUERPO = 1024;
 const MAX_CUERPO_RESERVA = 8 * 1024; // pedido de hasta 40 líneas y comentario de 500 caracteres
 const MAX_CUERPO_PANEL = 16 * 1024;  // evento o ajustes de un álbum (hasta 200 fotos ancladas)
 const MAX_FOTO = 6 * 1024 * 1024;    // fotos de eventos (el panel ya las reduce antes de subirlas)
+/* Aforo del propio servidor. Por encima de MAX_EN_CURSO peticiones a la vez se responde 503 al momento
+   (cuesta casi nada) en lugar de ir acumulando trabajo hasta quedarse sin memoria. Por encima de
+   MAX_CONEXIONES, Node cierra las conexiones nuevas: así no se agotan los sockets del sistema */
+const MAX_EN_CURSO = 256;
+const MAX_CONEXIONES = 1024;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -110,7 +115,13 @@ const CABECERAS_SEGURIDAD = {
   ].join("; "),
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "X-Frame-Options": "DENY"
+  "X-Frame-Options": "DENY",
+  // La web no usa ninguna de estas funciones del navegador: así ni un script inyectado ni el iframe del mapa
+  // pueden pedir cámara, micrófono, ubicación, pagos o sensores. () = nadie, tampoco la propia web
+  "Permissions-Policy": [
+    "camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()", "serial=()", "bluetooth=()",
+    "accelerometer=()", "gyroscope=()", "magnetometer=()", "browsing-topics=()"
+  ].join(", ")
 };
 
 /* ¿La conexión viene del propio equipo? */
@@ -450,7 +461,18 @@ function crearServidor(opciones = {}) {
     return enviar(res, 404, { ok: false, error: "No encontrado." });
   }
 
+  // Peticiones que se están atendiendo ahora mismo (se descuentan al terminar o si el visitante corta)
+  const maxEnCurso = opciones.maxEnCurso || MAX_EN_CURSO;
+  let enCurso = 0;
+
   const servidor = http.createServer(async (req, res) => {
+    if (enCurso >= maxEnCurso) {
+      // Lleno: respuesta controlada. Connection: close libera el socket para quien venga detrás
+      return enviar(res, 503, { ok: false, error: "Ahora mismo hay mucha gente conectada. Inténtalo de nuevo en unos segundos." },
+        { "Retry-After": "10", Connection: "close" });
+    }
+    enCurso++;
+    res.once("close", () => { enCurso--; });
     try {
       // Por https, el navegador recuerda durante un año que solo debe entrar por https
       if (esHttps(req)) res.setHeader("Strict-Transport-Security", "max-age=31536000");
@@ -470,6 +492,7 @@ function crearServidor(opciones = {}) {
   servidor.headersTimeout = 20_000;
   servidor.requestTimeout = 120_000;
   servidor.setTimeout(120_000);
+  servidor.maxConnections = opciones.maxConexiones || MAX_CONEXIONES;
 
   servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); consultasRpp.cerrar(); });
   servidor.almacen = almacen;

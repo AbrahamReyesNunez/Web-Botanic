@@ -719,7 +719,7 @@
           <button class="btn btn-neon" type="submit">${btnHTML("Apuntarme")}</button>
         </div>
         <p class="form-error" role="alert" hidden></p>
-        <p class="list-legal">Al apuntarte confirmas que eres mayor de 18 años y aceptas que usemos tu nombre solo para gestionar la lista de esta noche.</p>
+        <p class="list-legal">Al apuntarte confirmas que eres mayor de 18 años. Usamos tu nombre solo para gestionar la lista de esta noche y lo borramos a los 30 días. Puedes pedir que lo borremos antes. <a href="privacidad.html" target="_blank" rel="noopener">Privacidad</a></p>
       </form>`;
 
     const form = $("form", box);
@@ -1370,7 +1370,7 @@
             <div class="res-carrito-cuerpo"></div>
             <p class="res-pago">El reservado se paga en la puerta de la discoteca.</p>
           </section>
-          <p class="list-legal">Al enviar la solicitud, usaremos tu nombre y teléfono para gestionarla y contactarte. No será firme hasta que la confirmemos. Solo para mayores de 18 años.</p>
+          <p class="list-legal">Al enviar la solicitud, usaremos tu nombre y teléfono para gestionarla y contactarte, y los borraremos a los 30 días. No será firme hasta que la confirmemos. Solo para mayores de 18 años. <a href="privacidad.html" target="_blank" rel="noopener">Privacidad</a></p>
         </section>
 
         <p class="form-error" role="alert" hidden></p>

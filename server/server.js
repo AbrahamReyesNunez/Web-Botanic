@@ -48,7 +48,8 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
-  ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon"
+  ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon",
+  ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8"
 };
 
 /* ---------- Caché del navegador y compresión de los archivos de la web ---------- */
@@ -105,8 +106,9 @@ const CABECERAS_SEGURIDAD = {
   "Content-Security-Policy": [
     "default-src 'self'",
     "script-src 'self'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com",
+    // Fuentes propias (public/fonts): ni estilos ni fuentes de Google, que recibiría la IP de cada visita
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     // Galería: miniaturas de Google Drive y álbumes desde el Google Apps Script (public/data/config.js)
     "img-src 'self' data: https://drive.google.com https://lh3.googleusercontent.com",
     "frame-src https://www.google.com",

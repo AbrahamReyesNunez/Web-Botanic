@@ -26,6 +26,8 @@ const { crearContenido } = require("./contenido.js");
 const { crearDrive } = require("./drive.js");
 const { crearGaleria } = require("./galeria.js");
 const { crearLimitador } = require("./limites.js");
+const { crearRegistro, eventoDe } = require("./registro.js");
+const { revisarEntorno } = require("./entorno.js");
 
 const RAIZ = path.resolve(__dirname, "..");
 /* Lo único que se sirve como archivos: la web. .env, data/db, el código y la documentación quedan fuera */
@@ -34,6 +36,11 @@ const MAX_CUERPO = 1024;
 const MAX_CUERPO_RESERVA = 8 * 1024; // pedido de hasta 40 líneas y comentario de 500 caracteres
 const MAX_CUERPO_PANEL = 16 * 1024;  // evento o ajustes de un álbum (hasta 200 fotos ancladas)
 const MAX_FOTO = 6 * 1024 * 1024;    // fotos de eventos (el panel ya las reduce antes de subirlas)
+/* Aforo del propio servidor. Por encima de MAX_EN_CURSO peticiones a la vez se responde 503 al momento
+   (cuesta casi nada) en lugar de ir acumulando trabajo hasta quedarse sin memoria. Por encima de
+   MAX_CONEXIONES, Node cierra las conexiones nuevas: así no se agotan los sockets del sistema */
+const MAX_EN_CURSO = 256;
+const MAX_CONEXIONES = 1024;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -41,7 +48,8 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
-  ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon"
+  ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon",
+  ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8"
 };
 
 /* ---------- Caché del navegador y compresión de los archivos de la web ---------- */
@@ -98,8 +106,9 @@ const CABECERAS_SEGURIDAD = {
   "Content-Security-Policy": [
     "default-src 'self'",
     "script-src 'self'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com",
+    // Fuentes propias (public/fonts): ni estilos ni fuentes de Google, que recibiría la IP de cada visita
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     // Galería: miniaturas de Google Drive y álbumes desde el Google Apps Script (public/data/config.js)
     "img-src 'self' data: https://drive.google.com https://lh3.googleusercontent.com",
     "frame-src https://www.google.com",
@@ -110,7 +119,13 @@ const CABECERAS_SEGURIDAD = {
   ].join("; "),
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "X-Frame-Options": "DENY"
+  "X-Frame-Options": "DENY",
+  // La web no usa ninguna de estas funciones del navegador: así ni un script inyectado ni el iframe del mapa
+  // pueden pedir cámara, micrófono, ubicación, pagos o sensores. () = nadie, tampoco la propia web
+  "Permissions-Policy": [
+    "camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()", "serial=()", "bluetooth=()",
+    "accelerometer=()", "gyroscope=()", "magnetometer=()", "browsing-topics=()"
+  ].join(", ")
 };
 
 /* ¿La conexión viene del propio equipo? */
@@ -192,6 +207,8 @@ function crearServidor(opciones = {}) {
   const cookieSegura = (req) => req.socket.encrypted || !!trustProxy;
   // Consultas de links de RPP: los códigos no se pueden adivinar, pero así tampoco se pueden recorrer
   const consultasRpp = crearLimitador([{ ms: 10 * 60 * 1000, max: 60 }]);
+  // Log interno de seguridad y errores (server/registro.js): sin IPs ni datos de las peticiones
+  const registro = opciones.registro || crearRegistro();
 
   function enviar(res, status, cuerpo, cabeceras = {}) {
     res.writeHead(status, { ...CABECERAS_SEGURIDAD, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...cabeceras });
@@ -343,7 +360,8 @@ function crearServidor(opciones = {}) {
 
     // Álbumes de la galería: copia del Google Apps Script que el servidor renueva cada 10 min
     if (m === "GET" && ruta === "/api/galeria") {
-      if (!galeria.configurada) return enviar(res, 503, { ok: false, error: "Falta galeria.scriptUrl en public/data/config.js." });
+      // Mensaje público genérico: la ruta del archivo de configuración no es asunto del visitante
+      if (!galeria.configurada) return enviar(res, 503, { ok: false, error: "La galería no está disponible ahora mismo." });
       let copia;
       try { copia = await galeria.obtener(); } catch (e) {
         return enviar(res, 502, { ok: false, error: "No se ha podido leer la galería de Google Drive." });
@@ -450,18 +468,41 @@ function crearServidor(opciones = {}) {
     return enviar(res, 404, { ok: false, error: "No encontrado." });
   }
 
+  // Peticiones que se están atendiendo ahora mismo (se descuentan al terminar o si el visitante corta)
+  const maxEnCurso = opciones.maxEnCurso || MAX_EN_CURSO;
+  let enCurso = 0;
+
+  /* Datos de la petición para el log: método, ruta y huella de la IP. Nada más */
+  const contexto = (req, ruta) => ({ origen: huella(ipDe(req)), metodo: req.method, ruta: ruta ?? req.url });
+
   const servidor = http.createServer(async (req, res) => {
+    if (enCurso >= maxEnCurso) {
+      registro.aviso("servidor_lleno", { ...contexto(req), status: 503 });
+      // Lleno: respuesta controlada. Connection: close libera el socket para quien venga detrás
+      return enviar(res, 503, { ok: false, error: "Ahora mismo hay mucha gente conectada. Inténtalo de nuevo en unos segundos." },
+        { "Retry-After": "10", Connection: "close" });
+    }
+    enCurso++;
+    res.once("close", () => { enCurso--; });
+    let ruta = null;
+    // Un solo sitio decide qué se apunta en el log, sea cual sea la ruta que ha respondido
+    res.once("finish", () => {
+      const evento = eventoDe(req.method, ruta, res.statusCode);
+      if (evento) registro.aviso(evento, { ...contexto(req, ruta), status: res.statusCode });
+    });
     try {
       // Por https, el navegador recuerda durante un año que solo debe entrar por https
       if (esHttps(req)) res.setHeader("Strict-Transport-Security", "max-age=31536000");
       const url = new URL(req.url, "http://localhost");
-      const ruta = url.pathname;
+      ruta = url.pathname;
       if (ruta.startsWith("/api/")) return await api(req, res, ruta, url);
       if (req.method !== "GET" && req.method !== "HEAD") return enviar(res, 405, { ok: false, error: "Método no permitido." });
       servirArchivo(req, res, ruta, url);
     } catch (e) {
-      console.error(e);
+      // El detalle (mensaje y pila) va al log interno; el visitante solo ve un mensaje genérico
+      registro.error("error_interno", e, contexto(req, ruta));
       if (!res.headersSent) enviar(res, 500, { ok: false, error: "Error interno." });
+      else res.destroy();   // a medio enviar: se corta en vez de dejar una respuesta incompleta abierta
     }
   });
 
@@ -470,8 +511,9 @@ function crearServidor(opciones = {}) {
   servidor.headersTimeout = 20_000;
   servidor.requestTimeout = 120_000;
   servidor.setTimeout(120_000);
+  servidor.maxConnections = opciones.maxConexiones || MAX_CONEXIONES;
 
-  servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); consultasRpp.cerrar(); });
+  servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); consultasRpp.cerrar(); registro.cerrar(); });
   servidor.almacen = almacen;
   servidor.galeria = galeria;
   servidor.listo = contenido.listo;
@@ -486,22 +528,16 @@ if (require.main === module) {
   process.on("uncaughtException", (e) => { console.error("Error no controlado:", e); process.exit(1); });
   process.on("unhandledRejection", (e) => { console.error("Promesa rechazada sin controlar:", e); process.exit(1); });
   cargarEnv();
-  let claveAdmin = process.env.ADMIN_KEY;
-  if (!claveAdmin) {
-    claveAdmin = crypto.randomBytes(18).toString("base64url");
-    console.warn(`\n  ADMIN_KEY no definida (ver .env.example). Clave temporal del panel: ${claveAdmin}\n`);
-  } else if (claveAdmin === "cambia-esta-clave") {
-    // Es la de .env.example, que está publicada en GitHub: cualquiera podría entrar en el panel
-    console.error("\n  ADMIN_KEY es la clave de ejemplo de .env.example (pública en GitHub). Pon una tuya, de 20 caracteres o más.\n");
+  // Secretos (server/entorno.js): en producción, ausentes o débiles = no arranca; en local, solo avisa
+  const entorno = revisarEntorno(process.env);
+  for (const aviso of entorno.avisos) console.warn(`\n  ⚠ ${aviso}\n`);
+  if (entorno.errores.length) {
+    for (const e of entorno.errores) console.error(`\n  ✘ ${e}\n`);
+    console.error(`  El servidor no arranca${entorno.produccion ? " (modo producción: NODE_ENV=production o TRUST_PROXY=1/remoto)" : ""}.\n`);
     process.exit(1);
-  } else if (claveAdmin.length < 20) {
-    console.warn(`\n  ⚠ ADMIN_KEY tiene ${claveAdmin.length} caracteres: usa 20 o más antes de publicar la web.\n`);
   }
+  const { claveAdmin } = entorno;
   const { SUPABASE_URL, SUPABASE_SECRET_KEY } = process.env;
-  if (!SUPABASE_URL !== !SUPABASE_SECRET_KEY) {
-    console.error("\n  Falta SUPABASE_URL o SUPABASE_SECRET_KEY en .env: hacen falta las dos (o ninguna, para usar JSON).\n");
-    process.exit(1);
-  }
   const supabase = SUPABASE_URL ? { url: SUPABASE_URL, clave: SUPABASE_SECRET_KEY } : null;
   const puerto = Number(process.env.PORT) || 3000;
   const servidor = crearServidor({
@@ -515,7 +551,7 @@ if (require.main === module) {
   // local ni de internet llega al puerto sin pasar por el túnel. HOST lo cambia (p. ej. 0.0.0.0)
   const host = process.env.HOST || (process.env.TRUST_PROXY === "1" ? "127.0.0.1" : undefined);
   servidor.listo.then(() => servidor.listen(puerto, host, () => {
-    console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html`);
+    console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html  ·  modo: ${entorno.produccion ? "producción" : "desarrollo"}`);
     console.log(supabase ? "  Datos: Supabase" : "  Datos: data/db (JSON). Para usar Supabase, define SUPABASE_URL y SUPABASE_SECRET_KEY.");
     if (!process.env.DRIVE_SCRIPT_CLAVE) console.log("  Sin DRIVE_SCRIPT_CLAVE: el panel no podrá subir fotos de eventos a Drive (ver .env.example).");
     // La primera visita ya encuentra la galería en memoria

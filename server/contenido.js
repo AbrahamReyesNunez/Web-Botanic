@@ -79,7 +79,8 @@ function crearContenido({ almacen, cal, drive, reintentoMs = 5000 }) {
       console.error(e);
       if (faltaTabla(e)) return error(503, "Falta la tabla web_contenido en la base de datos. Ejecuta supabase/migrations/005_web_contenido.sql en Supabase → SQL Editor y reinicia el servidor.");
       if (faltaAjustes(e)) return error(503, "La base de datos aún no puede guardar el estilo de la web. Ejecuta supabase/migrations/006_tema_web.sql en Supabase → SQL Editor.");
-      return error(500, `No se ha podido guardar en la base de datos (${e.message}).`);
+      // El error de la base de datos ya está en el log (console.error de arriba): al panel, solo un mensaje genérico
+      return error(500, "No se ha podido guardar. Inténtalo de nuevo en un momento.");
     });
     cola = p.catch(() => {});
     return p;
@@ -159,7 +160,10 @@ function crearContenido({ almacen, cal, drive, reintentoMs = 5000 }) {
       if (!ID_DRIVE.test(String(id))) return error(502, "Google Drive no devolvió un id válido.");
       return ok({ id }, 201);
     } catch (e) {
-      return error(e.status || 502, e.message);
+      // Solo pasan al panel los mensajes escritos para él (e.publico, de server/drive.js: falta la clave,
+      // Google no responde…). Lo que conteste Google (excepciones del Apps Script) se queda en el log
+      console.error(`Subir foto a Drive: ${e.message}${e.cause ? ` (${e.cause.message || e.cause})` : ""}`);
+      return error(e.status || 502, e.publico ? e.message : "No se ha podido subir la foto a Google Drive. Inténtalo de nuevo.");
     }
   }
 

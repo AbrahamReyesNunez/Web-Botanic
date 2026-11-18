@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacidad · Botanic Chipiona</title>
+  <meta name="description" content="Qué datos personales trata la web de Discoteca Botanic Chipiona, para qué, cuánto tiempo y cómo ejercer tus derechos.">
+  <meta name="theme-color" content="#06120f">
+  <link rel="icon" href="/img/brand/icono-48.png" sizes="48x48" type="image/png">
+  <link rel="apple-touch-icon" href="/img/brand/icono-180.png">
+  <link rel="stylesheet" href="/css/fuentes.css?v=1">
+  <link rel="stylesheet" href="/css/styles.css?v=20">
+  <!--
+    Este aviso describe lo que hace el código de la web a día de hoy: si cambia lo que se guarda
+    o con quién se comparte, hay que actualizarlo (y la fecha del final).
+    - Los 30 días los cumple Supabase (migraciones 004 y 009, con pg_cron). El almacén JSON de data/db
+      no anonimiza nada: en producción tiene que usarse Supabase para que este texto sea cierto.
+    - Los registros del servidor (server/registro.js) salen por la consola: el hosting o pm2 tiene que
+      borrarlos a los 30 días como mucho (p. ej. pm2-logrotate con retain), porque aquí se promete.
+    - Si la web no se publica con Cloudflare, cambiad esa línea de «Con quién se comparten» por el hosting real.
+  -->
+  <style>
+    .legal { max-width: 72ch; margin: 0 auto; padding: 88px var(--gutter) 72px; }
+    .legal-brand { display: inline-block; margin-bottom: 2rem; }
+    .legal h1 {
+      margin: 0 0 .4rem; font-family: var(--font-display); font-weight: 800;
+      font-size: clamp(1.6rem, 6vw, 2.6rem); line-height: 1.1; text-transform: uppercase;
+    }
+    .legal h2 {
+      margin: 2.4rem 0 .7rem; font-family: var(--font-display); font-weight: 600;
+      font-size: clamp(1rem, 3.4vw, 1.25rem); text-transform: uppercase; letter-spacing: .04em;
+    }
+    .legal p, .legal li { line-height: 1.65; color: var(--text, inherit); }
+    .legal ul { padding-left: 1.2rem; }
+    .legal li + li { margin-top: .4rem; }
+    .legal .resumen { color: var(--muted); font-size: 1.05rem; }
+    .legal .actualizado { color: var(--muted); font-size: .85rem; margin-top: 3rem; }
+    .legal a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+    .tabla-datos { width: 100%; border-collapse: collapse; margin: .6rem 0 0; font-size: .92rem; }
+    .tabla-datos th, .tabla-datos td { text-align: left; vertical-align: top; padding: .55rem .5rem; border-bottom: 1px solid rgba(255,255,255,.12); }
+    .tabla-datos th { font-weight: 700; }
+    @media (max-width: 560px) {
+      .tabla-datos thead { display: none; }
+      .tabla-datos tr { display: block; padding: .5rem 0; border-bottom: 1px solid rgba(255,255,255,.12); }
+      .tabla-datos td { display: block; border: 0; padding: .15rem 0; }
+      .tabla-datos td::before { content: attr(data-col) ": "; font-weight: 700; }
+    }
+  </style>
+</head>
+<body>
+  <main class="legal">
+    <a href="/" class="brand legal-brand" aria-label="Botanic, ir al inicio">B<span class="o-slash">Ø</span>TANIC</a>
+
+    <p class="eyebrow">Política de privacidad</p>
+    <h1>Tus datos en esta web</h1>
+    <p class="resumen">Pedimos lo mínimo para apuntarte a la lista o pedir mesa, lo usamos solo para eso y lo borramos a los 30 días. No usamos cookies de análisis ni de publicidad, y no vendemos datos a nadie.</p>
+
+    <h2>Quién es el responsable</h2>
+    <ul>
+      <li><strong>Responsable:</strong> Discoteca Botanic Chipiona</li>
+      <li><strong>Dirección:</strong> Calle Dr. Tolosa Latour, 37 · 11550 Chipiona (Cádiz)</li>
+      <li><strong>Contacto para temas de privacidad:</strong> WhatsApp o teléfono <a href="https://wa.me/34671434657" target="_blank" rel="noopener">671 434 657</a>, o por carta a la dirección de arriba.</li>
+    </ul>
+
+    <h2>Qué datos tratamos y para qué</h2>
+    <table class="tabla-datos">
+      <thead><tr><th>Cuándo</th><th>Qué datos</th><th>Para qué</th></tr></thead>
+      <tbody>
+        <tr>
+          <td data-col="Cuándo">Te apuntas a la lista</td>
+          <td data-col="Qué datos">Nombre y apellidos, la noche elegida y, si entras con su enlace, el RPP que te invita.</td>
+          <td data-col="Para qué">Ponerte en la lista de esa noche para que en la puerta te encuentren al enseñar tu DNI.</td>
+        </tr>
+        <tr>
+          <td data-col="Cuándo">Pides una mesa (reservados)</td>
+          <td data-col="Qué datos">Nombre, teléfono, número de personas, el pedido de bebidas, tus comentarios y, si entras con su enlace, el RPP.</td>
+          <td data-col="Para qué">Gestionar tu petición, llamarte o escribirte para confirmarla y preparar la mesa.</td>
+        </tr>
+        <tr>
+          <td data-col="Cuándo">Cada alta en la lista y cada aviso de seguridad</td>
+          <td data-col="Qué datos">Una huella técnica de tu conexión: un código que sale de tu dirección IP, pero del que no se puede volver a la IP. No guardamos la IP.</td>
+          <td data-col="Para qué">Evitar abusos: que alguien llene la lista con nombres falsos, pruebe claves del panel o sature la web.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>No pedimos ni guardamos tu DNI: solo lo enseñas en la puerta. La web no tiene cuentas de usuario.</p>
+
+    <h2>Por qué podemos tratarlos (base legal)</h2>
+    <ul>
+      <li><strong>Lista y reservas:</strong> porque tú nos lo pides al enviar el formulario. Es necesario para darte el servicio que solicitas (artículo 6.1.b del RGPD). Si no nos das el nombre (y el teléfono, en las reservas), no podemos apuntarte.</li>
+      <li><strong>Huella técnica y avisos de seguridad:</strong> nuestro interés legítimo en proteger la web y la lista frente a abusos (artículo 6.1.f del RGPD). Para eso basta un código que no identifica tu IP.</li>
+    </ul>
+
+    <h2>Cuánto tiempo los guardamos</h2>
+    <ul>
+      <li><strong>Lista:</strong> 30 días después de la noche. Pasado ese plazo, tu nombre se sustituye por «Anonimizado» y se borra la huella técnica. Solo queda el recuento (cuánta gente fue esa noche y con qué RPP).</li>
+      <li><strong>Reservas:</strong> 30 días después de la noche. Se borran tu nombre, tu teléfono y tus comentarios. Solo queda la mesa, el pedido y el importe, sin nada que te identifique.</li>
+      <li><strong>Avisos de seguridad del servidor</strong> (huella técnica, hora y página, nunca tu nombre ni tu teléfono): 30 días como máximo.</li>
+    </ul>
+
+    <h2>Con quién se comparten</h2>
+    <p>Solo con los proveedores que necesitamos para que la web funcione. Tratan los datos por encargo nuestro y no pueden usarlos para nada más:</p>
+    <ul>
+      <li><strong>Supabase</strong>: la base de datos donde se guardan la lista y las reservas.</li>
+      <li><strong>Cloudflare</strong>, que hace llegar la web a tu navegador de forma segura (HTTPS) y la protege de ataques.</li>
+      <li><strong>Google</strong>: el mapa de «Dónde estamos» es de Google Maps, y las fotos de la galería y de los eventos se guardan en Google Drive. Al cargarlos, tu navegador se conecta a Google, que recibe tu dirección IP y puede usar sus propias cookies según su <a href="https://policies.google.com/privacy?hl=es" target="_blank" rel="noopener">política de privacidad</a>.</li>
+    </ul>
+    <p>Algunos de estos proveedores son empresas de Estados Unidos. Cuando los datos salen del Espacio Económico Europeo, la transferencia se ampara en el Marco de Privacidad de Datos UE-EE. UU. (Data Privacy Framework) o en las cláusulas contractuales tipo aprobadas por la Comisión Europea. Dentro del local, solo accede a la lista y a las reservas el equipo que las gestiona.</p>
+
+    <h2>Lo que guarda tu navegador</h2>
+    <p>No usamos cookies de análisis, de publicidad ni de redes sociales. Esta web solo guarda en tu propio dispositivo lo necesario para que funcione lo que pides. Por eso no te pedimos consentimiento de cookies:</p>
+    <ul>
+      <li><code>botanic_lista</code> (almacenamiento local): recuerda a quién has apuntado desde este dispositivo, para enseñártelo al volver. No se envía a ningún sitio y puedes borrarlo desde los ajustes de tu navegador.</li>
+      <li>Almacenamiento de la sesión: el RPP del enlace con el que entraste y un ajuste de rendimiento de las animaciones. Se borra al cerrar la pestaña.</li>
+    </ul>
+    <p>El mapa de Google Maps puede usar sus propias cookies. Si prefieres evitarlo, usa el botón «Abrir en Google Maps» o bloquea las cookies de terceros en tu navegador.</p>
+
+    <h2>Tus derechos</h2>
+    <p>Puedes pedirnos en cualquier momento que te digamos qué datos tuyos tenemos, que los corrijamos o los borremos, que dejemos de usarlos o que limitemos su uso, y que te los demos en un formato que puedas llevarte (derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad). Escríbenos por WhatsApp al <a href="https://wa.me/34671434657" target="_blank" rel="noopener">671 434 657</a> o por carta a la dirección de arriba, indicando la noche y el nombre con el que te apuntaste o el teléfono de la reserva. Para protegerte, puede que te pidamos confirmar que eres tú. Te responderemos en un mes como máximo.</p>
+    <p>Si crees que no hemos tratado bien tus datos, puedes reclamar ante la Agencia Española de Protección de Datos en <a href="https://www.aepd.es" target="_blank" rel="noopener">www.aepd.es</a>.</p>
+
+    <h2>Solo mayores de 18 años</h2>
+    <p>Botanic es una discoteca para mayores de 18 años. Los formularios son solo para ellos: si eres menor, no envíes tus datos.</p>
+
+    <p class="actualizado">Última actualización: 18 de noviembre de 2026.</p>
+    <div class="hero-actions">
+      <a href="/" class="btn btn-ghost"><span class="btn-label">Volver al inicio</span><span class="btn-arrow" aria-hidden="true">→</span></a>
+    </div>
+  </main>
+</body>
+</html>

@@ -13,6 +13,7 @@
 const { createClient } = require("@supabase/supabase-js");
 
 const CACHE_RPPS_MS = 30_000;
+const TIEMPO_MAX_CONSULTA_MS = 10_000;
 const PAGINA = 1000; // Supabase devuelve como mucho 1000 filas por consulta
 const GRUPOS = ["botellas", "refrescos", "chupitos", "champan", "suplementos"];
 const CAMPOS_RESERVA = "id, fecha, tipo, estado, nombre, telefono, personas, rpp, total, a_consultar, notas, creado, decidido, "
@@ -36,10 +37,16 @@ function reservaDeFila({ a_consultar, reserva_lineas: lineas, notas, ...fila }) 
   return reserva;
 }
 
-function crearAlmacenSupabase({ url, clave, cliente }) {
-  // Vale tanto la URL del proyecto como la de la API (…/rest/v1/). "cliente" solo se usa en las pruebas
+function crearAlmacenSupabase({ url, clave, cliente, fetch, tiempoMaximoMs = TIEMPO_MAX_CONSULTA_MS }) {
+  // Vale tanto la URL del proyecto como la de la API (…/rest/v1/). "cliente" y "fetch" solo se usan en las pruebas.
+  // db.timeout: ninguna consulta espera más de tiempoMaximoMs. Si la base de datos se cuelga, la consulta falla
+  // y el servidor responde "Error interno" en vez de dejar la petición abierta 2 min ocupando un hueco del aforo.
+  // Se usa el de la librería (y no un fetch propio con AbortSignal.timeout) porque una consulta cortada así
+  // no se reintenta: con uno propio, las lecturas se reintentaban 3 veces y podían tardar ~47 s
   const db = cliente || createClient(String(url).trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, ""), clave, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    db: { timeout: tiempoMaximoMs },
+    ...(fetch ? { global: { fetch } } : {})
   });
 
   const datosDe = ({ data, error }, que) => {

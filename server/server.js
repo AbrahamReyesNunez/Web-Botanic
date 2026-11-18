@@ -27,6 +27,7 @@ const { crearDrive } = require("./drive.js");
 const { crearGaleria } = require("./galeria.js");
 const { crearLimitador } = require("./limites.js");
 const { crearRegistro, eventoDe } = require("./registro.js");
+const { revisarEntorno } = require("./entorno.js");
 
 const RAIZ = path.resolve(__dirname, "..");
 /* Lo único que se sirve como archivos: la web. .env, data/db, el código y la documentación quedan fuera */
@@ -525,22 +526,16 @@ if (require.main === module) {
   process.on("uncaughtException", (e) => { console.error("Error no controlado:", e); process.exit(1); });
   process.on("unhandledRejection", (e) => { console.error("Promesa rechazada sin controlar:", e); process.exit(1); });
   cargarEnv();
-  let claveAdmin = process.env.ADMIN_KEY;
-  if (!claveAdmin) {
-    claveAdmin = crypto.randomBytes(18).toString("base64url");
-    console.warn(`\n  ADMIN_KEY no definida (ver .env.example). Clave temporal del panel: ${claveAdmin}\n`);
-  } else if (claveAdmin === "cambia-esta-clave") {
-    // Es la de .env.example, que está publicada en GitHub: cualquiera podría entrar en el panel
-    console.error("\n  ADMIN_KEY es la clave de ejemplo de .env.example (pública en GitHub). Pon una tuya, de 20 caracteres o más.\n");
+  // Secretos (server/entorno.js): en producción, ausentes o débiles = no arranca; en local, solo avisa
+  const entorno = revisarEntorno(process.env);
+  for (const aviso of entorno.avisos) console.warn(`\n  ⚠ ${aviso}\n`);
+  if (entorno.errores.length) {
+    for (const e of entorno.errores) console.error(`\n  ✘ ${e}\n`);
+    console.error(`  El servidor no arranca${entorno.produccion ? " (modo producción: NODE_ENV=production o TRUST_PROXY=1/remoto)" : ""}.\n`);
     process.exit(1);
-  } else if (claveAdmin.length < 20) {
-    console.warn(`\n  ⚠ ADMIN_KEY tiene ${claveAdmin.length} caracteres: usa 20 o más antes de publicar la web.\n`);
   }
+  const { claveAdmin } = entorno;
   const { SUPABASE_URL, SUPABASE_SECRET_KEY } = process.env;
-  if (!SUPABASE_URL !== !SUPABASE_SECRET_KEY) {
-    console.error("\n  Falta SUPABASE_URL o SUPABASE_SECRET_KEY en .env: hacen falta las dos (o ninguna, para usar JSON).\n");
-    process.exit(1);
-  }
   const supabase = SUPABASE_URL ? { url: SUPABASE_URL, clave: SUPABASE_SECRET_KEY } : null;
   const puerto = Number(process.env.PORT) || 3000;
   const servidor = crearServidor({
@@ -554,7 +549,7 @@ if (require.main === module) {
   // local ni de internet llega al puerto sin pasar por el túnel. HOST lo cambia (p. ej. 0.0.0.0)
   const host = process.env.HOST || (process.env.TRUST_PROXY === "1" ? "127.0.0.1" : undefined);
   servidor.listo.then(() => servidor.listen(puerto, host, () => {
-    console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html`);
+    console.log(`  Botanic en http://localhost:${puerto}  ·  panel: http://localhost:${puerto}/admin.html  ·  modo: ${entorno.produccion ? "producción" : "desarrollo"}`);
     console.log(supabase ? "  Datos: Supabase" : "  Datos: data/db (JSON). Para usar Supabase, define SUPABASE_URL y SUPABASE_SECRET_KEY.");
     if (!process.env.DRIVE_SCRIPT_CLAVE) console.log("  Sin DRIVE_SCRIPT_CLAVE: el panel no podrá subir fotos de eventos a Drive (ver .env.example).");
     // La primera visita ya encuentra la galería en memoria

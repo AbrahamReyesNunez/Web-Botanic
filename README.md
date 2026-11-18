@@ -75,8 +75,8 @@ Al arrancar, la consola dice dónde se guardan los datos: `Datos: Supabase` o `D
 
 | Variable | Para qué sirve | ¿Obligatoria? |
 |---|---|---|
-| `ADMIN_KEY` | Clave para entrar en `/admin.html`. Debe tener 20 caracteres o más. Con la clave de ejemplo el servidor **no arranca**, y si es más corta avisa. Si no la defines, se genera una temporal y se muestra en la consola. | Sí |
-| `FORM_SECRET` | Texto largo y aleatorio para firmar los formularios y la huella de origen de la lista. Si está vacío se genera uno al arrancar: los formularios abiertos caducan al reiniciar. | En producción |
+| `ADMIN_KEY` | Clave para entrar en `/admin.html`: 20 caracteres o más, aleatoria. Con la clave de ejemplo el servidor **no arranca**. En producción (`NODE_ENV=production` o `TRUST_PROXY` `1`/`remoto`) tampoco arranca sin clave o con una más corta; en local solo avisa y, si no la defines, genera una temporal y la muestra en la consola. | Sí |
+| `FORM_SECRET` | Texto aleatorio de 32 caracteres o más (distinto de `ADMIN_KEY`) para firmar los formularios y la huella de origen de la lista y del log. En producción no arranca si es más corto. Si está vacío se genera uno al arrancar: los formularios abiertos caducan al reiniciar. | En producción |
 | `PORT` | Puerto del servidor (por defecto `3000`). | No |
 | `TRUST_PROXY` | `0` sin proxy (en local), `1` con proxy en el mismo equipo (`cloudflared`, Nginx) y `remoto` con proxy en otra máquina (Render, Railway…). Ver [sección 11](#11-publicar-la-web). | En producción |
 | `HOST` | Dirección en la que escucha el servidor. Por defecto es `127.0.0.1` con `TRUST_PROXY=1` y todas las demás veces escucha en todas. | No |
@@ -336,7 +336,7 @@ delete from inscripciones where fecha = 'AAAA-MM-DD' and origen = '…';
 La web necesita un servidor que ejecute **Node.js 22 o superior**: un PC o VPS con `cloudflared`, Render, Railway… **GitHub Pages no sirve.**
 
 ### Configuración de producción (`.env` o variables del hosting)
-- `ADMIN_KEY` de 20 caracteres o más.
+- `ADMIN_KEY` de 20 caracteres o más y `FORM_SECRET` de 32 o más, los dos aleatorios y distintos. Se generan con `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Con `TRUST_PROXY` puesto el servidor está en modo producción y no arranca si son débiles.
 - `FORM_SECRET` fijo, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y `DRIVE_SCRIPT_CLAVE`. Sin Supabase, los datos se guardan en `data/db/`, que en un hosting se pierde al redesplegar.
 - **`TRUST_PROXY`**, para que los límites por IP vean la IP real de cada visitante:
   - `1` con el túnel de Cloudflare (`cloudflared`) en el mismo equipo. La IP se lee del final de `X-Forwarded-For` solo si la conexión viene del propio equipo, y el servidor escucha solo en 127.0.0.1: nadie llega al puerto sin pasar por el túnel. **Sin esto**, todas las visitas llegarían desde 127.0.0.1 y compartirían los límites (5 fallos de clave de cualquiera bloquearían el panel).
@@ -405,7 +405,7 @@ git push -u origin feature/mi-cambio       # 4. súbela a GitHub
 
 | Problema | Causa y solución |
 |---|---|
-| El servidor no arranca y habla de `ADMIN_KEY` | Estás usando la clave de ejemplo de `.env.example`. Pon una tuya de 20 caracteres o más. |
+| El servidor no arranca y habla de `ADMIN_KEY` o `FORM_SECRET` | Estás usando la clave de ejemplo de `.env.example`, o estás en modo producción (`TRUST_PROXY` `1`/`remoto` o `NODE_ENV=production`) con una clave ausente o corta. El mensaje dice cuál y cómo generar una buena. |
 | La consola dice `Datos: data/db (JSON)` y querías Supabase | Faltan `SUPABASE_URL` o `SUPABASE_SECRET_KEY` en `.env`. Comprueba la conexión con `npm run comprobar-supabase`. |
 | Error de Supabase sobre una tabla o función que no existe | Falta aplicar alguna migración. Mira la tabla `migraciones` y aplica las que falten, en orden. |
 | Supabase no responde | El proyecto puede estar pausado. Ve al panel de Supabase y pulsa **Restore**. |

@@ -26,6 +26,7 @@ const { crearContenido } = require("./contenido.js");
 const { crearDrive } = require("./drive.js");
 const { crearGaleria } = require("./galeria.js");
 const { crearLimitador } = require("./limites.js");
+const { crearRegistro, eventoDe } = require("./registro.js");
 
 const RAIZ = path.resolve(__dirname, "..");
 /* Lo único que se sirve como archivos: la web. .env, data/db, el código y la documentación quedan fuera */
@@ -203,6 +204,8 @@ function crearServidor(opciones = {}) {
   const cookieSegura = (req) => req.socket.encrypted || !!trustProxy;
   // Consultas de links de RPP: los códigos no se pueden adivinar, pero así tampoco se pueden recorrer
   const consultasRpp = crearLimitador([{ ms: 10 * 60 * 1000, max: 60 }]);
+  // Log interno de seguridad y errores (server/registro.js): sin IPs ni datos de las peticiones
+  const registro = opciones.registro || crearRegistro();
 
   function enviar(res, status, cuerpo, cabeceras = {}) {
     res.writeHead(status, { ...CABECERAS_SEGURIDAD, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...cabeceras });
@@ -354,7 +357,8 @@ function crearServidor(opciones = {}) {
 
     // Álbumes de la galería: copia del Google Apps Script que el servidor renueva cada 10 min
     if (m === "GET" && ruta === "/api/galeria") {
-      if (!galeria.configurada) return enviar(res, 503, { ok: false, error: "Falta galeria.scriptUrl en public/data/config.js." });
+      // Mensaje público genérico: la ruta del archivo de configuración no es asunto del visitante
+      if (!galeria.configurada) return enviar(res, 503, { ok: false, error: "La galería no está disponible ahora mismo." });
       let copia;
       try { copia = await galeria.obtener(); } catch (e) {
         return enviar(res, 502, { ok: false, error: "No se ha podido leer la galería de Google Drive." });
@@ -465,25 +469,37 @@ function crearServidor(opciones = {}) {
   const maxEnCurso = opciones.maxEnCurso || MAX_EN_CURSO;
   let enCurso = 0;
 
+  /* Datos de la petición para el log: método, ruta y huella de la IP. Nada más */
+  const contexto = (req, ruta) => ({ origen: huella(ipDe(req)), metodo: req.method, ruta: ruta ?? req.url });
+
   const servidor = http.createServer(async (req, res) => {
     if (enCurso >= maxEnCurso) {
+      registro.aviso("servidor_lleno", { ...contexto(req), status: 503 });
       // Lleno: respuesta controlada. Connection: close libera el socket para quien venga detrás
       return enviar(res, 503, { ok: false, error: "Ahora mismo hay mucha gente conectada. Inténtalo de nuevo en unos segundos." },
         { "Retry-After": "10", Connection: "close" });
     }
     enCurso++;
     res.once("close", () => { enCurso--; });
+    let ruta = null;
+    // Un solo sitio decide qué se apunta en el log, sea cual sea la ruta que ha respondido
+    res.once("finish", () => {
+      const evento = eventoDe(req.method, ruta, res.statusCode);
+      if (evento) registro.aviso(evento, { ...contexto(req, ruta), status: res.statusCode });
+    });
     try {
       // Por https, el navegador recuerda durante un año que solo debe entrar por https
       if (esHttps(req)) res.setHeader("Strict-Transport-Security", "max-age=31536000");
       const url = new URL(req.url, "http://localhost");
-      const ruta = url.pathname;
+      ruta = url.pathname;
       if (ruta.startsWith("/api/")) return await api(req, res, ruta, url);
       if (req.method !== "GET" && req.method !== "HEAD") return enviar(res, 405, { ok: false, error: "Método no permitido." });
       servirArchivo(req, res, ruta, url);
     } catch (e) {
-      console.error(e);
+      // El detalle (mensaje y pila) va al log interno; el visitante solo ve un mensaje genérico
+      registro.error("error_interno", e, contexto(req, ruta));
       if (!res.headersSent) enviar(res, 500, { ok: false, error: "Error interno." });
+      else res.destroy();   // a medio enviar: se corta en vez de dejar una respuesta incompleta abierta
     }
   });
 
@@ -494,7 +510,7 @@ function crearServidor(opciones = {}) {
   servidor.setTimeout(120_000);
   servidor.maxConnections = opciones.maxConexiones || MAX_CONEXIONES;
 
-  servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); consultasRpp.cerrar(); });
+  servidor.on("close", () => { lista.cerrar(); reservas.cerrar(); admin.cerrar(); consultasRpp.cerrar(); registro.cerrar(); });
   servidor.almacen = almacen;
   servidor.galeria = galeria;
   servidor.listo = contenido.listo;

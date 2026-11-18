@@ -16,6 +16,7 @@ function crearDrive({ url, clave, fetch = globalThis.fetch, tiempoMaximoMs = TIE
     if (!configurado) {
       const e = new Error("Falta DRIVE_SCRIPT_CLAVE en .env: sin ella no se pueden subir fotos a Drive.");
       e.status = 503;
+      e.publico = true;   // mensaje escrito para el panel: se le puede enseñar tal cual
       throw e;
     }
     // Apps Script responde con una redirección a script.googleusercontent.com, que fetch sigue sola.
@@ -31,13 +32,16 @@ function crearDrive({ url, clave, fetch = globalThis.fetch, tiempoMaximoMs = TIE
     } catch (causa) {
       // Sin red o sin respuesta a tiempo: mensaje claro para el panel, sin detalles internos de la conexión
       const tiempo = causa && causa.name === "TimeoutError";
-      const e = new Error(tiempo ? "Google Drive no ha respondido a tiempo. Inténtalo de nuevo." : "No se ha podido conectar con Google Drive.");
+      // La causa (p. ej. ENOTFOUND) viaja en e.cause para el log, no en el mensaje
+      const e = new Error(tiempo ? "Google Drive no ha respondido a tiempo. Inténtalo de nuevo." : "No se ha podido conectar con Google Drive.", { cause: causa });
       e.status = tiempo ? 504 : 502;
+      e.publico = true;
       throw e;
     }
     let j;
     try { j = await r.json(); } catch (e) { j = null; }
     if (!r.ok || !j || !j.ok) {
+      // Respuesta de Google o del Apps Script (puede traer el texto de una excepción): sin "publico", solo va al log
       const e = new Error(`Google Drive: ${(j && j.error) || `respuesta ${r.status}`}`);
       e.status = 502;
       throw e;
